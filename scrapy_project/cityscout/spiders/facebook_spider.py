@@ -22,16 +22,31 @@ class FacebookSpider(scrapy.Spider):
     def load_facebook_urls(self):
         """Load Facebook URLs from data/facebook_urls.txt"""
         try:
-            # Look for the data file in multiple locations
+            # Determine the correct path based on where the spider is being run from
+            # The spider directory is cityscout/spiders/, so go up 3 levels to reach data/
+            spider_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(spider_dir)))
+            
             possible_paths = [
+                # Relative to spider file location
                 os.path.join(os.path.dirname(__file__), '../../data/facebook_urls.txt'),
+                # Relative to project root
+                os.path.join(project_root, 'data/facebook_urls.txt'),
+                # From common run locations
                 '/home/luke/git-repos/cityscoutAI/data/facebook_urls.txt',
                 './data/facebook_urls.txt',
+                '../data/facebook_urls.txt',
+                '../../data/facebook_urls.txt',
+                '../../../data/facebook_urls.txt',
             ]
             
+            self.logger.info(f"Looking for facebook_urls.txt in: {possible_paths}")
+            
             for path in possible_paths:
-                if os.path.exists(path):
-                    with open(path, 'r') as f:
+                abs_path = os.path.abspath(path)
+                if os.path.exists(abs_path):
+                    self.logger.info(f"Found facebook_urls.txt at: {abs_path}")
+                    with open(abs_path, 'r') as f:
                         for line in f:
                             line = line.strip()
                             # Skip empty lines and comments
@@ -40,17 +55,21 @@ class FacebookSpider(scrapy.Spider):
                                 self.start_urls.append(line)
                                 if '/events' not in line:
                                     self.start_urls.append(f"{line}/events")
-                    self.logger.info(f"Loaded {len(set(self.start_urls))} unique URLs from {path}")
+                    
+                    self.logger.info(f"Loaded {len(set(self.start_urls))} unique URLs from {abs_path}")
+                    self.logger.info(f"URLs to crawl: {self.start_urls}")
                     return
             
             # Fallback to default if no file found
             self.logger.warning("facebook_urls.txt not found, using default page")
+            self.logger.warning(f"Checked these paths: {possible_paths}")
             self.start_urls = [
                 'https://www.facebook.com/SeveranceBrewing',
                 'https://www.facebook.com/SeveranceBrewing/events',
             ]
         except Exception as e:
             self.logger.error(f"Error loading Facebook URLs: {e}")
+            self.logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
             self.start_urls = [
                 'https://www.facebook.com/SeveranceBrewing',
                 'https://www.facebook.com/SeveranceBrewing/events',
