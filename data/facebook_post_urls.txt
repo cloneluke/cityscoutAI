@@ -1,0 +1,8 @@
+# Facebook Post URLs for Event Extraction
+# Format: facebook_page_url | post_url | caption (optional)
+#
+# These are direct links to Facebook posts that may contain event information
+# The spider will attempt to extract photos and text from these posts
+
+# Bin 201 (Downtown Sioux Falls Wine)
+https://www.facebook.com/dtsfwine | https://www.facebook.com/dtsfwine/posts/pfbid0TfYytwG9kyi5HJnS4UnYhaSmVm7hqS8FG7B1r3hmZcMW55rPJCYUyEuCweLbuKTRl |

@@ -31,12 +31,14 @@ class FacebookSpider(scrapy.Spider):
         super().__init__(*args, **kwargs)
         self.start_urls = []
         self.photo_urls = []  # Store photo URLs to process
+        self.post_urls = []   # Store post URLs to process
         self.venues = {}  # Store venue information
         self.load_facebook_urls()
         self.load_facebook_photo_urls()
+        self.load_facebook_post_urls()
         self.load_venue_info()
         self.image_service = ImageService() if HAS_IMAGE_SERVICE else None
-        self.logger.info(f"Initialized Facebook spider for {len(self.start_urls)} pages and {len(self.photo_urls)} photos")
+        self.logger.info(f"Initialized Facebook spider for {len(self.start_urls)} pages, {len(self.photo_urls)} photos, and {len(self.post_urls)} posts")
         if self.image_service:
             self.logger.info("Image processing service enabled")
     
@@ -140,6 +142,48 @@ class FacebookSpider(scrapy.Spider):
         except Exception as e:
             self.logger.error(f"Error loading Facebook photo URLs: {e}")
     
+    def load_facebook_post_urls(self):
+        """Load Facebook post URLs from data/facebook_post_urls.txt"""
+        try:
+            spider_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(spider_dir)))
+            
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), '../../data/facebook_post_urls.txt'),
+                os.path.join(project_root, 'data/facebook_post_urls.txt'),
+                '/home/luke/git-repos/cityscoutAI/data/facebook_post_urls.txt',
+                './data/facebook_post_urls.txt',
+            ]
+            
+            for path in possible_paths:
+                abs_path = os.path.abspath(path)
+                if os.path.exists(abs_path):
+                    self.logger.info(f"Found facebook_post_urls.txt at: {abs_path}")
+                    with open(abs_path, 'r') as f:
+                        for line in f:
+                            line = line.strip()
+                            # Skip empty lines and comments
+                            if line and not line.startswith('#'):
+                                # Parse format: facebook_page | post_url | caption
+                                parts = [p.strip() for p in line.split('|')]
+                                if len(parts) >= 2:
+                                    page_url = parts[0]
+                                    post_url = parts[1]
+                                    caption = parts[2] if len(parts) > 2 else None
+                                    
+                                    self.post_urls.append({
+                                        'page_url': page_url,
+                                        'post_url': post_url,
+                                        'caption': caption
+                                    })
+                    
+                    self.logger.info(f"Loaded {len(self.post_urls)} post URLs from {abs_path}")
+                    return
+            
+            self.logger.debug("facebook_post_urls.txt not found - no post URLs to process")
+        except Exception as e:
+            self.logger.error(f"Error loading Facebook post URLs: {e}")
+    
     def load_venue_info(self):
         """Load venue information from data/facebook_venues.txt"""
         try:
@@ -192,7 +236,7 @@ class FacebookSpider(scrapy.Spider):
         return self.venues.get(facebook_url, {})
     
     def start_requests(self):
-        """Generate requests for both page URLs and photo URLs"""
+        """Generate requests for page URLs, photo URLs, and post URLs"""
         # Generate requests for regular page URLs
         for url in self.start_urls:
             yield scrapy.Request(url, callback=self.parse, meta={'dont_obey_robotstxt': True})
@@ -208,6 +252,19 @@ class FacebookSpider(scrapy.Spider):
                     'photo_data': photo_data
                 },
                 errback=self.errback_photo
+            )
+        
+        # Generate requests for post URLs
+        for post_data in self.post_urls:
+            self.logger.info(f"Processing post from {post_data['page_url']}")
+            yield scrapy.Request(
+                post_data['post_url'],
+                callback=self.parse_post,
+                meta={
+                    'dont_obey_robotstxt': True,
+                    'post_data': post_data
+                },
+                errback=self.errback_post
             )
     
     def errback_photo(self, failure):
@@ -545,3 +602,67 @@ class FacebookSpider(scrapy.Spider):
         except Exception as e:
             self.logger.error(f"Error processing image: {e}")
             return {}
+    
+    def errback_post(self, failure):
+        """Handle post request errors"""
+        self.logger.warning(f"Failed to fetch post: {failure.request.url}")
+        self.logger.debug(f"Error: {failure.value}")
+    
+    def parse_post(self, response):
+        """Parse a Facebook post and extract embedded images and event information"""
+        try:
+            post_data = response.meta.get('post_data', {})
+            post_url = post_data.get('post_url', '')
+            page_url = post_data.get('page_url', '')
+            post_caption = post_data.get('caption', '')
+            
+            self.logger.info(f"Parsing post: {post_url}")
+            
+            # Extract all images from the post
+            image_urls = response.xpath('//img[@class="scaledImageFitWidth"]/@src').getall()
+            
+            # Also try other image selectors
+            if not image_urls:
+                image_urls = response.xpath('//img[contains(@class, "img")]/@src').getall()
+            
+            if not image_urls:
+                og_image = response.xpath('//meta[@property="og:image"]/@content').get()
+                if og_image:
+                    image_urls = [og_image]
+            
+            self.logger.info(f"Found {len(image_urls)} images in post")
+            
+            # Extract post text
+            post_text_parts = response.xpath('//div[@data-testid="post_message"]//text()').getall()
+            post_text = ' '.join(post_text_parts) if post_text_parts else post_caption
+            
+            if not image_urls:
+                self.logger.warning(f"No images found in post {post_url}")
+                return
+            
+            # Process each image from the post
+            for idx, image_url in enumerate(image_urls, 1):
+                # Clean up image URL
+                image_url = image_url.split('?')[0] if '?' in image_url else image_url
+                
+                if not image_url.startswith('http'):
+                    continue
+                
+                self.logger.info(f"Processing post image {idx}/{len(image_urls)}: {image_url[:50]}...")
+                
+                # Create photo data for image processing
+                photo_data = {
+                    'page_url': page_url,
+                    'post_url': post_url,
+                    'photo_url': image_url,
+                    'image_url': image_url,
+                    'caption': post_text
+                }
+                
+                # Extract event from this image
+                event_item = self.extract_event_from_photo(photo_data)
+                if event_item:
+                    yield event_item
+        
+        except Exception as e:
+            self.logger.error(f"Error parsing post: {e}")
