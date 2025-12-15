@@ -86,9 +86,17 @@ class SiouxFallsSpider(scrapy.Spider):
             event_names = random.sample(venue_data['events'], num_events)
             
             for event_name in event_names:
-                # Generate a date in the next 30-90 days
-                days_ahead = random.randint(30, 90)
-                event_date = datetime.now() + timedelta(days=days_ahead)
+                # Generate a mix of past and future events
+                # 30% past (last 30 days), 70% future (next 30-90 days)
+                event_type = random.random()
+                if event_type < 0.3:
+                    # Past event (1-30 days ago)
+                    days_offset = -random.randint(1, 30)
+                else:
+                    # Future event (30-90 days ahead)
+                    days_offset = random.randint(30, 90)
+                
+                event_date = datetime.now() + timedelta(days=days_offset)
                 
                 # Generate a time
                 hour = random.choice([18, 19, 20, 21])
