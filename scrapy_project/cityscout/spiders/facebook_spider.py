@@ -5,6 +5,20 @@ import hashlib
 import logging
 import re
 import os
+import sys
+import json
+
+# Add backend path to import image service
+backend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'backend')
+if backend_path not in sys.path:
+    sys.path.insert(0, backend_path)
+
+try:
+    from app.services.image_service import ImageService
+    HAS_IMAGE_SERVICE = True
+except ImportError:
+    HAS_IMAGE_SERVICE = False
+    logging.warning("ImageService not available - image processing disabled")
 
 
 class FacebookSpider(scrapy.Spider):
@@ -17,7 +31,10 @@ class FacebookSpider(scrapy.Spider):
         super().__init__(*args, **kwargs)
         self.start_urls = []
         self.load_facebook_urls()
+        self.image_service = ImageService() if HAS_IMAGE_SERVICE else None
         self.logger.info(f"Initialized Facebook spider for {len(self.start_urls)} pages")
+        if self.image_service:
+            self.logger.info("Image processing service enabled")
     
     def load_facebook_urls(self):
         """Load Facebook URLs from data/facebook_urls.txt"""
@@ -233,11 +250,34 @@ class FacebookSpider(scrapy.Spider):
             item['organizer'] = self.facebook_page
             
             # Other fields
-            item['image_url'] = post.css('img::attr(src)').get() or ''
+            image_url = post.css('img::attr(src)').get() or ''
+            item['image_url'] = image_url
             item['attendee_count'] = '0'
             item['url'] = f"https://www.facebook.com/{self.facebook_page}"
             item['source'] = 'facebook'
             item['scraped_at'] = datetime.now().isoformat()
+            
+            # Extract event info from images if available
+            if image_url and self.image_service:
+                self.logger.info(f"Processing image from post: {image_url[:50]}...")
+                image_info = self.image_service.extract_event_info_from_image(image_url)
+                
+                if image_info and image_info.get('confidence') in ['high', 'medium']:
+                    self.logger.info(f"Extracted from image: {image_info}")
+                    
+                    # Update item with image-extracted data (prefer image data if available)
+                    if image_info.get('title') and image_info['title'] != 'null':
+                        item['title'] = image_info['title']
+                    if image_info.get('date') and image_info['date'] != 'null':
+                        item['date'] = image_info['date']
+                    if image_info.get('time') and image_info['time'] != 'null':
+                        item['start_time'] = image_info['time']
+                    if image_info.get('location') and image_info['location'] != 'null':
+                        item['location'] = image_info['location']
+                    if image_info.get('address') and image_info['address'] != 'null':
+                        item['address'] = image_info['address']
+                    if image_info.get('description'):
+                        item['description'] = f"{post_text[:200]} | Image: {image_info.get('description', '')}"
             
             # Generate unique event ID
             event_hash = f"{item['title']}{item['date']}{item['location']}"
@@ -249,3 +289,32 @@ class FacebookSpider(scrapy.Spider):
         except Exception as e:
             self.logger.error(f"Error parsing post as event: {e}")
             return None
+    
+    def process_image_for_events(self, image_url: str) -> dict:
+        """
+        Process a single image and extract event information.
+        Can be called independently to scan image-heavy pages.
+        """
+        if not self.image_service:
+            return {}
+        
+        try:
+            self.logger.info(f"Analyzing image for event info: {image_url}")
+            
+            # First check if it's likely an event image
+            if not self.image_service.is_likely_event_image(image_url):
+                self.logger.info(f"Image does not appear to be event-related")
+                return {}
+            
+            # Extract event information
+            event_info = self.image_service.extract_event_info_from_image(image_url)
+            
+            if event_info and event_info.get('confidence') in ['high', 'medium']:
+                self.logger.info(f"Successfully extracted event info from image")
+                return event_info
+            
+            return {}
+        
+        except Exception as e:
+            self.logger.error(f"Error processing image: {e}")
+            return {}

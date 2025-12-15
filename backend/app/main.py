@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from app.routes import events, search
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from app.routes import events, search, images
 from app.config import get_settings
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,6 +33,7 @@ app.add_middleware(
 # Include routers
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
+app.include_router(images.router, tags=["images"])
 
 @app.get("/health")
 async def health():
@@ -50,6 +53,26 @@ async def root():
         "version": settings.API_VERSION,
         "docs": "/docs"
     }
+
+# Determine base directory
+app_dir = os.path.dirname(__file__)
+base_dir = os.path.dirname(app_dir)
+
+# Mount static files directory for HTML interface
+if os.path.exists(base_dir):
+    app.mount("/static", StaticFiles(directory=base_dir), name="static")
+    logger.info(f"Static files mounted at {base_dir}")
+
+@app.get("/events")
+async def serve_events_page():
+    """Serve the events HTML page"""
+    events_file = os.path.join(base_dir, "events.html")
+    
+    if os.path.exists(events_file):
+        return FileResponse(events_file, media_type="text/html")
+    else:
+        logger.error(f"events.html not found at {events_file}")
+        return {"error": f"events.html not found at {events_file}"}
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):

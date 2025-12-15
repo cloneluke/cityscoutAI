@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cityscoutAI - Sioux Falls Events</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            color: white;
+            font-weight: 600;
+        }
+
+        .stat {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .events-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .event-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            border-left: 5px solid #667eea;
+        }
+
+        .event-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .event-title {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .event-location {
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .event-details {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .detail-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #333;
+            min-width: 80px;
+        }
+
+        .event-description {
+            color: #555;
+            font-size: 0.95em;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+
+        .event-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag {
+            background: #f0f0f0;
+            color: #667eea;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2em;
+            padding: 40px;
+        }
+
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .no-results {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            color: #999;
+            font-size: 1.1em;
+        }
+
+        .attendees {
+            background: #f9f9f9;
+            padding: 8px 12px;
+            border-radius: 6px;
+            color: #667eea;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .event-url {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.85em;
+            word-break: break-all;
+        }
+
+        .event-url:hover {
+            text-decoration: underline;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            padding: 20px;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            .events-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎉 cityscoutAI Events</h1>
+            <p class="subtitle">Discover events in Sioux Falls</p>
+        </header>
+
+        <div class="controls">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search events (e.g., brewery, wine, concert)...">
+            </div>
+            <button onclick="searchEvents()">Search</button>
+            <button onclick="clearSearch()">Clear</button>
+            <div class="stats">
+                <div class="stat">📊 <span id="totalCount">0</span> Total</div>
+                <div class="stat">🔍 <span id="displayCount">0</span> Showing</div>
+            </div>
+        </div>
+
+        <div id="errorContainer"></div>
+
+        <div id="loadingContainer" class="loading" style="display: none;">
+            Loading events...
+        </div>
+
+        <div id="eventsContainer" class="events-grid"></div>
+
+        <footer>
+            <p>cityscoutAI - Local Event Discovery Platform | Powered by Scrapy, Elasticsearch & FastAPI</p>
+        </footer>
+    </div>
+
+    <script>
+        let allEvents = [];
+        const API_BASE = 'http://localhost:8000/api';
+
+        // Load events on page load
+        window.addEventListener('DOMContentLoaded', loadEvents);
+
+        // Search on Enter key
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                searchEvents();
+            }
+        });
+
+        async function loadEvents() {
+            const loadingContainer = document.getElementById('loadingContainer');
+            const errorContainer = document.getElementById('errorContainer');
+            loadingContainer.style.display = 'block';
+            errorContainer.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/events/?limit=100`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                allEvents = await response.json();
+                displayEvents(allEvents);
+                document.getElementById('totalCount').textContent = allEvents.length;
+            } catch (error) {
+                console.error('Error loading events:', error);
+                errorContainer.innerHTML = `<div class="error">Error loading events: ${error.message}</div>`;
+            } finally {
+                loadingContainer.style.display = 'none';
+            }
+        }
+
+        function searchEvents() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            
+            if (!query) {
+                displayEvents(allEvents);
+                return;
+            }
+
+            const filteredEvents = allEvents.filter(event => {
+                const searchableText = `
+                    ${event.title}
+                    ${event.description}
+                    ${event.location}
+                    ${event.organizer}
+                    ${event.tags.join(' ')}
+                `.toLowerCase();
+                return searchableText.includes(query);
+            });
+
+            displayEvents(filteredEvents);
+        }
+
+        function clearSearch() {
+            document.getElementById('searchInput').value = '';
+            displayEvents(allEvents);
+        }
+
+        function displayEvents(events) {
+            const container = document.getElementById('eventsContainer');
+            document.getElementById('displayCount').textContent = events.length;
+
+            if (events.length === 0) {
+                container.innerHTML = '<div class="no-results">No events found. Try a different search.</div>';
+                return;
+            }
+
+            container.innerHTML = events.map(event => `
+                <div class="event-card">
+                    <div class="event-title">${escapeHtml(event.title)}</div>
+                    <div class="event-location">📍 ${escapeHtml(event.location)}</div>
+                    
+                    <div class="event-details">
+                        <div class="detail-row">
+                            <span class="detail-label">📅 Date:</span>
+                            <span>${escapeHtml(event.date)}</span>
+                        </div>
+                        ${event.start_time ? `
+                        <div class="detail-row">
+                            <span class="detail-label">⏰ Time:</span>
+                            <span>${escapeHtml(event.start_time)}${event.end_time ? ` - ${escapeHtml(event.end_time)}` : ''}</span>
+                        </div>
+                        ` : ''}
+                        ${event.address ? `
+                        <div class="detail-row">
+                            <span class="detail-label">📍 Address:</span>
+                            <span>${escapeHtml(event.address)}</span>
+                        </div>
+                        ` : ''}
+                        ${event.organizer ? `
+                        <div class="detail-row">
+                            <span class="detail-label">🏢 Organizer:</span>
+                            <span>${escapeHtml(event.organizer)}</span>
+                        </div>
+                        ` : ''}
+                        ${event.attendee_count ? `
+                        <div class="detail-row">
+                            <span class="attendees">👥 ${event.attendee_count} expected attendees</span>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    ${event.description ? `
+                    <div class="event-description">${escapeHtml(event.description)}</div>
+                    ` : ''}
+
+                    ${event.tags && event.tags.length > 0 ? `
+                    <div class="event-tags">
+                        ${event.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+                    </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
