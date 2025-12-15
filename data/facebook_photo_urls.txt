@@ -1,0 +1,17 @@
+# Facebook Photo URLs for Event Extraction
+# Format: facebook_page_url | photo_url | image_url | caption (optional)
+#
+# To find the image URL:
+# 1. Open the Facebook photo in your browser
+# 2. Right-click on the image
+# 3. Select "Copy image link" 
+# 4. Paste the URL in the image_url field below
+#
+# The spider will extract event information from these photos
+# and create events in Elasticsearch
+
+# Downtown Sioux Falls Wine
+# Photo URL: https://www.facebook.com/photo.php?fbid=1449282227200521&set=pb.100063562721782.-2207520000&type=3
+# To use: Find the image URL by right-clicking the image and selecting "Copy image link"
+# Then update this line with the actual image URL
+https://www.facebook.com/dtsfwine | https://www.facebook.com/photo.php?fbid=1449282227200521&set=pb.100063562721782.-2207520000&type=3 | | Wine event posted at Downtown Sioux Falls Wine

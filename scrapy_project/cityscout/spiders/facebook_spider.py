@@ -30,9 +30,13 @@ class FacebookSpider(scrapy.Spider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.start_urls = []
+        self.photo_urls = []  # Store photo URLs to process
+        self.venues = {}  # Store venue information
         self.load_facebook_urls()
+        self.load_facebook_photo_urls()
+        self.load_venue_info()
         self.image_service = ImageService() if HAS_IMAGE_SERVICE else None
-        self.logger.info(f"Initialized Facebook spider for {len(self.start_urls)} pages")
+        self.logger.info(f"Initialized Facebook spider for {len(self.start_urls)} pages and {len(self.photo_urls)} photos")
         if self.image_service:
             self.logger.info("Image processing service enabled")
     
@@ -92,6 +96,229 @@ class FacebookSpider(scrapy.Spider):
                 'https://www.facebook.com/SeveranceBrewing/events',
             ]
     
+    def load_facebook_photo_urls(self):
+        """Load Facebook photo URLs from data/facebook_photo_urls.txt"""
+        try:
+            spider_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(spider_dir)))
+            
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), '../../data/facebook_photo_urls.txt'),
+                os.path.join(project_root, 'data/facebook_photo_urls.txt'),
+                '/home/luke/git-repos/cityscoutAI/data/facebook_photo_urls.txt',
+                './data/facebook_photo_urls.txt',
+            ]
+            
+            for path in possible_paths:
+                abs_path = os.path.abspath(path)
+                if os.path.exists(abs_path):
+                    self.logger.info(f"Found facebook_photo_urls.txt at: {abs_path}")
+                    with open(abs_path, 'r') as f:
+                        for line in f:
+                            line = line.strip()
+                            # Skip empty lines and comments
+                            if line and not line.startswith('#'):
+                                # Parse format: facebook_page | photo_url | image_url | caption
+                                parts = [p.strip() for p in line.split('|')]
+                                if len(parts) >= 2:
+                                    page_url = parts[0]
+                                    photo_url = parts[1]
+                                    image_url = parts[2] if len(parts) > 2 else None
+                                    caption = parts[3] if len(parts) > 3 else None
+                                    
+                                    self.photo_urls.append({
+                                        'page_url': page_url,
+                                        'photo_url': photo_url,
+                                        'image_url': image_url,
+                                        'caption': caption
+                                    })
+                    
+                    self.logger.info(f"Loaded {len(self.photo_urls)} photo URLs from {abs_path}")
+                    return
+            
+            self.logger.debug("facebook_photo_urls.txt not found - no photo URLs to process")
+        except Exception as e:
+            self.logger.error(f"Error loading Facebook photo URLs: {e}")
+    
+    def load_venue_info(self):
+        """Load venue information from data/facebook_venues.txt"""
+        try:
+            spider_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(spider_dir)))
+            
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), '../../data/facebook_venues.txt'),
+                os.path.join(project_root, 'data/facebook_venues.txt'),
+                '/home/luke/git-repos/cityscoutAI/data/facebook_venues.txt',
+                './data/facebook_venues.txt',
+            ]
+            
+            for path in possible_paths:
+                abs_path = os.path.abspath(path)
+                if os.path.exists(abs_path):
+                    self.logger.info(f"Found facebook_venues.txt at: {abs_path}")
+                    with open(abs_path, 'r') as f:
+                        for line in f:
+                            line = line.strip()
+                            # Skip empty lines and comments
+                            if line and not line.startswith('#'):
+                                # Parse format: facebook_url | venue_name | address | city | state | country
+                                parts = [p.strip() for p in line.split('|')]
+                                if len(parts) >= 3:
+                                    facebook_url = parts[0]
+                                    venue_name = parts[1]
+                                    address = parts[2]
+                                    city = parts[3] if len(parts) > 3 else ''
+                                    state = parts[4] if len(parts) > 4 else ''
+                                    country = parts[5] if len(parts) > 5 else ''
+                                    
+                                    self.venues[facebook_url] = {
+                                        'name': venue_name,
+                                        'address': address,
+                                        'city': city,
+                                        'state': state,
+                                        'country': country
+                                    }
+                    
+                    self.logger.info(f"Loaded {len(self.venues)} venue definitions from {abs_path}")
+                    return
+            
+            self.logger.debug("facebook_venues.txt not found - will use URL-based names")
+        except Exception as e:
+            self.logger.error(f"Error loading venue info: {e}")
+    
+    def get_venue_info(self, facebook_url):
+        """Get venue information for a Facebook URL"""
+        return self.venues.get(facebook_url, {})
+    
+    def start_requests(self):
+        """Generate requests for both page URLs and photo URLs"""
+        # Generate requests for regular page URLs
+        for url in self.start_urls:
+            yield scrapy.Request(url, callback=self.parse, meta={'dont_obey_robotstxt': True})
+        
+        # Generate requests for photo URLs
+        for photo_data in self.photo_urls:
+            self.logger.info(f"Processing photo from {photo_data['page_url']}")
+            yield scrapy.Request(
+                photo_data['photo_url'],
+                callback=self.parse_photo,
+                meta={
+                    'dont_obey_robotstxt': True,
+                    'photo_data': photo_data
+                },
+                errback=self.errback_photo
+            )
+    
+    def errback_photo(self, failure):
+        """Handle photo request errors"""
+        self.logger.warning(f"Failed to fetch photo: {failure.request.url}")
+        self.logger.debug(f"Error: {failure.value}")
+        
+        # Try to extract event from provided image_url directly
+        photo_data = failure.request.meta.get('photo_data')
+        if photo_data and photo_data.get('image_url'):
+            self.logger.info(f"Attempting direct image processing from provided URL")
+            event_item = self.extract_event_from_photo(photo_data)
+            if event_item:
+                yield event_item
+    
+    def parse_photo(self, response):
+        """Parse a Facebook photo and extract event information"""
+        try:
+            photo_data = response.meta.get('photo_data', {})
+            self.logger.info(f"Parsing photo page")
+            
+            # Try to find image URL from page
+            if not photo_data.get('image_url'):
+                og_image = response.xpath('//meta[@property="og:image"]/@content').get()
+                if og_image:
+                    photo_data['image_url'] = og_image
+                    self.logger.info(f"Found image from og:image: {og_image[:50]}...")
+            
+            # Try to extract caption
+            if not photo_data.get('caption'):
+                caption_parts = response.xpath('//div[@data-testid="photo_description"]//text()').getall()
+                if caption_parts:
+                    photo_data['caption'] = ' '.join(caption_parts)
+            
+            event_item = self.extract_event_from_photo(photo_data)
+            if event_item:
+                yield event_item
+        
+        except Exception as e:
+            self.logger.error(f"Error parsing photo: {e}")
+    
+    def extract_event_from_photo(self, photo_data):
+        """Extract event information from photo data"""
+        try:
+            image_url = photo_data.get('image_url')
+            caption = photo_data.get('caption', '')
+            photo_url = photo_data.get('photo_url', '')
+            page_url = photo_data.get('page_url', '')
+            
+            if not image_url:
+                self.logger.warning("No image URL available for event extraction")
+                return None
+            
+            self.logger.info(f"Processing image: {image_url[:50]}...")
+            
+            # Check if image service available
+            if not self.image_service:
+                self.logger.warning("Image service not available")
+                return None
+            
+            # Check if likely event image
+            if not self.image_service.is_likely_event_image(image_url):
+                self.logger.info("Image does not appear to be event-related")
+                return None
+            
+            # Extract event info
+            image_info = self.image_service.extract_event_info_from_image(image_url)
+            
+            if not image_info or image_info.get('confidence') not in ['high', 'medium']:
+                self.logger.warning("Low confidence event extraction")
+                return None
+            
+            # Get venue info for this Facebook page
+            venue_info = self.get_venue_info(page_url)
+            
+            item = EventItem()
+            item['title'] = image_info.get('title', 'Event from Photo')
+            item['date'] = image_info.get('date', 'TBA')
+            item['start_time'] = image_info.get('time', '')
+            item['end_time'] = None
+            
+            # Use venue info for location and address
+            item['location'] = venue_info.get('name') or image_info.get('location', 'TBA')
+            item['address'] = venue_info.get('address') or image_info.get('address', item['location'])
+            
+            # Combine image description with caption
+            descriptions = []
+            if image_info.get('description'):
+                descriptions.append(image_info['description'])
+            if caption:
+                descriptions.append(caption)
+            item['description'] = ' | '.join(descriptions)
+            
+            item['image_url'] = image_url
+            item['organizer'] = venue_info.get('name') or page_url.split('/')[-1] or 'Unknown'
+            item['attendee_count'] = 0
+            item['url'] = photo_url
+            item['source'] = 'facebook_photo'
+            item['scraped_at'] = datetime.now().isoformat()
+            
+            event_hash = f"{item['title']}{item['date']}{item['location']}"
+            item['event_id'] = hashlib.md5(event_hash.encode()).hexdigest()
+            item['tags'] = ['event', 'facebook-photo', 'image-extracted']
+            
+            self.logger.info(f"✅ Created event from photo: {item['title']}")
+            return item
+        
+        except Exception as e:
+            self.logger.error(f"Error extracting event from photo: {e}")
+            return None
+    
     def parse(self, response):
         """Parse Facebook page and extract events"""
         
@@ -105,9 +332,9 @@ class FacebookSpider(scrapy.Spider):
                 for link in event_links:
                     # Ensure absolute URL
                     if link.startswith('http'):
-                        yield scrapy.Request(link, callback=self.parse_event, dont_obey_robotstxt=True)
+                        yield scrapy.Request(link, callback=self.parse_event, meta={'dont_obey_robotstxt': True})
                     elif link.startswith('/'):
-                        yield scrapy.Request(f"https://www.facebook.com{link}", callback=self.parse_event, dont_obey_robotstxt=True)
+                        yield scrapy.Request(f"https://www.facebook.com{link}", callback=self.parse_event, meta={'dont_obey_robotstxt': True})
             
             # Also look for posts that mention events
             posts = response.css('[data-testid="post"]')
