@@ -9,35 +9,34 @@ NEWSPIDER_MODULE = 'cityscout.spiders'
 ROBOTSTXT_OBEY = True
 
 # Configure maximum concurrent requests performed by Scrapy
-CONCURRENT_REQUESTS = 16
+# Keep this low to avoid overwhelming servers
+CONCURRENT_REQUESTS = 1
 
 # Configure a delay for requests for the same website
-DOWNLOAD_DELAY = 5
+# Facebook is aggressive about blocking, so be very conservative
+DOWNLOAD_DELAY = 15
 RANDOMIZE_DOWNLOAD_DELAY = True
+RANDOM_DOWNLOAD_DELAY_RANGE = [10, 30]
 
 # The average amount of time (in seconds) that the downloader should wait
 DOWNLOAD_TIMEOUT = 30
 
-# User agent list for rotation
+# User agent list for rotation - use realistic modern agents
 USER_AGENT_LIST = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
 ]
 
 # Enable and configure HTTP caching
 HTTPCACHE_ENABLED = True
-HTTPCACHE_EXPIRATION_SECS = 0
+HTTPCACHE_EXPIRATION_SECS = 86400
 HTTPCACHE_DIR = 'httpcache'
 
-# Enable and configure the autothrottle extension
-AUTOTHROTTLE_ENABLED = True
-AUTOTHROTTLE_START_DELAY = 5
-AUTOTHROTTLE_MAX_DELAY = 60
-AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
-AUTOTHROTTLE_DEBUG = False
+# Disable autothrottle for Facebook - use manual conservative settings instead
+AUTOTHROTTLE_ENABLED = False
 
 # Configure item pipelines
 ITEM_PIPELINES = {
@@ -51,6 +50,13 @@ ELASTICSEARCH_HOST = 'http://localhost:9200'
 LOG_LEVEL = 'INFO'
 LOG_FORMAT = '%(asctime)s [%(name)s] %(levelname)s: %(message)s'
 
-# Retry settings
-RETRY_TIMES = 3
+# Retry settings - conservative to avoid triggering anti-bot measures
+RETRY_TIMES = 2
 RETRY_HTTP_CODES = [500, 502, 503, 504, 408, 429]
+RETRY_TIMES_WAIT = 10
+
+# Disable cookies to avoid session tracking
+COOKIES_ENABLED = False
+
+# Add referrer header for more realistic browsing
+REFERER_ENABLED = True
