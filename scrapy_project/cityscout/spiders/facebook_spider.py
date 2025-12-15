@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import hashlib
 import logging
 import re
+import os
 
 
 class FacebookSpider(scrapy.Spider):
@@ -12,18 +13,48 @@ class FacebookSpider(scrapy.Spider):
     name = 'facebook'
     allowed_domains = ['facebook.com']
     
-    # Facebook page/account to scan
-    facebook_page = 'SeveranceBrewing'
-    
-    # Different endpoints to check for events
-    start_urls = [
-        'https://www.facebook.com/SeveranceBrewing',
-        'https://www.facebook.com/SeveranceBrewing/events',
-    ]
-    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.logger.info(f"Initialized Facebook spider for page: {self.facebook_page}")
+        self.start_urls = []
+        self.load_facebook_urls()
+        self.logger.info(f"Initialized Facebook spider for {len(self.start_urls)} pages")
+    
+    def load_facebook_urls(self):
+        """Load Facebook URLs from data/facebook_urls.txt"""
+        try:
+            # Look for the data file in multiple locations
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), '../../data/facebook_urls.txt'),
+                '/home/luke/git-repos/cityscoutAI/data/facebook_urls.txt',
+                './data/facebook_urls.txt',
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path):
+                    with open(path, 'r') as f:
+                        for line in f:
+                            line = line.strip()
+                            # Skip empty lines and comments
+                            if line and not line.startswith('#'):
+                                # Extract both main page and events section
+                                self.start_urls.append(line)
+                                if '/events' not in line:
+                                    self.start_urls.append(f"{line}/events")
+                    self.logger.info(f"Loaded {len(set(self.start_urls))} unique URLs from {path}")
+                    return
+            
+            # Fallback to default if no file found
+            self.logger.warning("facebook_urls.txt not found, using default page")
+            self.start_urls = [
+                'https://www.facebook.com/SeveranceBrewing',
+                'https://www.facebook.com/SeveranceBrewing/events',
+            ]
+        except Exception as e:
+            self.logger.error(f"Error loading Facebook URLs: {e}")
+            self.start_urls = [
+                'https://www.facebook.com/SeveranceBrewing',
+                'https://www.facebook.com/SeveranceBrewing/events',
+            ]
     
     def parse(self, response):
         """Parse Facebook page and extract events"""
@@ -34,7 +65,7 @@ class FacebookSpider(scrapy.Spider):
             event_links += response.xpath('//a[contains(@href, "/events/")]/@href').getall()
             
             if event_links:
-                self.logger.info(f"Found {len(event_links)} potential event links")
+                self.logger.info(f"Found {len(event_links)} potential event links at {response.url}")
                 for link in event_links:
                     # Ensure absolute URL
                     if link.startswith('http'):
@@ -44,7 +75,7 @@ class FacebookSpider(scrapy.Spider):
             
             # Also look for posts that mention events
             posts = response.css('[data-testid="post"]')
-            self.logger.info(f"Found {len(posts)} posts to analyze")
+            self.logger.info(f"Found {len(posts)} posts to analyze at {response.url}")
             
             for post in posts:
                 # Extract post text

@@ -5,4 +5,11 @@
 # Update with your Facebook page/account:
 # Example: https://www.facebook.com/SeveranceBrewing
 
+# Sioux Falls Breweries & Entertainment
 https://www.facebook.com/SeveranceBrewing
+https://www.facebook.com/woodgrainbrew
+https://www.facebook.com/wgosf
+
+# Sioux Falls Venues & Wine
+https://www.facebook.com/washpav
+https://www.facebook.com/dtsfwine
