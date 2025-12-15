@@ -191,10 +191,117 @@ async def get_image_capabilities():
             "Event information extraction (title, date, time, location, price)",
             "Text extraction from images (OCR-like)",
             "Event image likelihood detection",
-            "Batch processing of multiple images"
+            "Batch processing of multiple images",
+            "Facebook photo event extraction"
         ],
         "model": "llava",
         "supported_formats": ["JPEG", "PNG", "WebP", "GIF"],
         "max_image_size_mb": 10,
         "extraction_confidence": ["high", "medium", "low"]
     }
+
+
+class FacebookPhotoRequest(BaseModel):
+    """Request to extract event from Facebook photo"""
+    photo_url: str
+    image_url: Optional[str] = None
+    caption: Optional[str] = None
+
+
+@router.post("/api/images/facebook-photo")
+async def extract_from_facebook_photo(request: FacebookPhotoRequest):
+    """
+    Extract event information from a Facebook photo.
+    
+    Useful for extracting events from direct Facebook photo URLs like:
+    https://www.facebook.com/photo.php?fbid=123456789&set=...
+    
+    Args:
+        photo_url: The Facebook photo URL
+        image_url: Direct URL to the image file (optional)
+        caption: Photo caption/description text (optional)
+    
+    Returns:
+        Extracted event information or error
+    """
+    try:
+        logger.info(f"Extracting event from Facebook photo: {request.photo_url[:50]}...")
+        
+        # If no image URL provided, we'd need to download from Facebook
+        # For now, require image_url to be provided
+        if not request.image_url:
+            logger.warning("No image_url provided - cannot extract from Facebook directly due to anti-scraping")
+            return {
+                "success": False,
+                "error": "image_url is required. Facebook blocks direct photo downloading. Please provide the direct image URL.",
+                "help": "You can usually find the image URL by right-clicking the image and selecting 'Copy image link'"
+            }
+        
+        # Check if likely event image
+        if not image_service.is_likely_event_image(request.image_url):
+            return {
+                "success": False,
+                "error": "Image does not appear to contain event information"
+            }
+        
+        # Extract event info from image
+        event_info = image_service.extract_event_info_from_image(request.image_url)
+        
+        if not event_info or event_info.get('confidence') not in ['high', 'medium']:
+            return {
+                "success": False,
+                "error": "Could not extract reliable event information from image",
+                "confidence": event_info.get('confidence') if event_info else 'unknown'
+            }
+        
+        # Build complete event object
+        from datetime import datetime
+        import hashlib
+        
+        event = {
+            "title": event_info.get('title', 'Event from Photo'),
+            "date": event_info.get('date', 'TBA'),
+            "start_time": event_info.get('time', ''),
+            "end_time": None,
+            "location": event_info.get('location', 'TBA'),
+            "address": event_info.get('address', event_info.get('location', 'TBA')),
+            "description": event_info.get('description', ''),
+            "image_url": request.image_url,
+            "organizer": (event_info.get('performers', ['Unknown'])[0] 
+                         if event_info.get('performers') else 'Unknown'),
+            "attendee_count": 0,
+            "url": request.photo_url,
+            "source": "facebook_photo",
+            "scraped_at": datetime.now().isoformat(),
+            "tags": ['event', 'facebook-photo', 'image-extracted']
+        }
+        
+        # Add performers as tags if available
+        if event_info.get('performers'):
+            event['tags'].extend([p.lower().replace(' ', '-') for p in event_info['performers']])
+        
+        # Generate event ID
+        event_hash = f"{event['title']}{event['date']}{event['location']}"
+        event['event_id'] = hashlib.md5(event_hash.encode()).hexdigest()
+        
+        logger.info(f"Successfully extracted event: {event['title']}")
+        
+        return {
+            "success": True,
+            "event": event,
+            "confidence": event_info.get('confidence'),
+            "extracted_fields": {
+                "title": event_info.get('title'),
+                "date": event_info.get('date'),
+                "time": event_info.get('time'),
+                "location": event_info.get('location'),
+                "address": event_info.get('address'),
+                "ticket_price": event_info.get('ticket_price'),
+                "performers": event_info.get('performers')
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error extracting from Facebook photo: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing photo: {str(e)}")
+
