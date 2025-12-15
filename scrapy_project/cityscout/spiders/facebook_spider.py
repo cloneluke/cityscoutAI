@@ -619,21 +619,45 @@ class FacebookSpider(scrapy.Spider):
             
             self.logger.info(f"Parsing post: {post_url}")
             
-            # Extract all images from the post
-            image_urls = response.xpath('//img[@class="scaledImageFitWidth"]/@src').getall()
+            # Try multiple selectors to find images in the post
+            # Facebook embeds images in various ways
+            image_urls = []
             
-            # Also try other image selectors
-            if not image_urls:
-                image_urls = response.xpath('//img[contains(@class, "img")]/@src').getall()
+            # Try og:image meta tag first (most reliable)
+            og_image = response.xpath('//meta[@property="og:image"]/@content').get()
+            if og_image:
+                image_urls.append(og_image)
+                self.logger.info(f"Found og:image: {og_image[:60]}...")
             
-            if not image_urls:
-                og_image = response.xpath('//meta[@property="og:image"]/@content').get()
-                if og_image:
-                    image_urls = [og_image]
+            # Try img tags with data attributes (Facebook's newer format)
+            data_img_urls = response.xpath('//img[@src and contains(@src, "http")]/@src').getall()
+            if data_img_urls:
+                image_urls.extend([u for u in data_img_urls if u.startswith('http') and 'fbcdn' in u])
             
-            self.logger.info(f"Found {len(image_urls)} images in post")
+            # Try picture element sources
+            picture_urls = response.xpath('//picture//img/@src').getall()
+            if picture_urls:
+                image_urls.extend([u for u in picture_urls if u.startswith('http')])
             
-            # Extract post text - Facebook heavily uses JS, so we'll get minimal text from static HTML
+            # Try srcset parsing
+            srcset_data = response.xpath('//img/@srcset').getall()
+            for srcset in srcset_data:
+                # srcset format: "url1 1x, url2 2x"
+                urls = [u.strip().split()[0] for u in srcset.split(',')]
+                image_urls.extend([u for u in urls if u.startswith('http')])
+            
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_images = []
+            for url in image_urls:
+                if url not in seen:
+                    seen.add(url)
+                    unique_images.append(url)
+            image_urls = unique_images
+            
+            self.logger.info(f"Found {len(image_urls)} unique images in post")
+            
+            # Extract post text
             post_text_parts = response.xpath('//div[@data-testid="post_message"]//text()').getall()
             if not post_text_parts:
                 post_text_parts = response.xpath('//div[contains(@class, "msg")]//text()').getall()
@@ -712,12 +736,21 @@ class FacebookSpider(scrapy.Spider):
             
             item = EventItem()
             item['title'] = f"Event at {venue_info.get('name')}"
-            item['date'] = 'Check Facebook'
+            item['date'] = 'Check Facebook post'
             item['start_time'] = ''
             item['end_time'] = None
             item['location'] = venue_info.get('name')
             item['address'] = venue_info.get('address', '')
-            item['description'] = f"See post for details: {post_url}"
+            
+            # Create a helpful description that guides users to extract the image
+            venue_name = venue_info.get('name', 'venue')
+            item['description'] = (
+                f"Event posted at {venue_name}. "
+                f"To extract details: Open {post_url} in your browser, "
+                f"save the event image, then use find_event_photos.py to queue it for processing, "
+                f"or manually add to facebook_photo_urls.txt"
+            )
+            
             item['image_url'] = ''
             item['organizer'] = venue_info.get('name')
             item['attendee_count'] = 0
@@ -727,7 +760,7 @@ class FacebookSpider(scrapy.Spider):
             
             event_hash = f"{item['title']}{item['date']}{item['location']}"
             item['event_id'] = hashlib.md5(event_hash.encode()).hexdigest()
-            item['tags'] = ['event', 'facebook-post', 'needs-review']
+            item['tags'] = ['event', 'facebook-post', 'needs-review', 'image-pending']
             
             self.logger.info(f"✅ Created fallback event from post: {item['title']}")
             return item

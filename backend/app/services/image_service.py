@@ -6,8 +6,20 @@ from typing import Dict, List, Optional
 from io import BytesIO
 from PIL import Image
 import re
+import time
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+# Create a session with persistent headers for image downloads
+_image_session = requests.Session()
+_image_session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache'
+})
 
 
 class ImageService:
@@ -19,9 +31,41 @@ class ImageService:
         self.api_url = f"{host}/api/generate"
     
     def download_image(self, image_url: str) -> Optional[bytes]:
-        """Download an image from URL"""
+        """Download an image from URL with retry logic for social media"""
         try:
-            response = requests.get(image_url, timeout=10)
+            # Extract domain to customize headers
+            parsed_url = urlparse(image_url)
+            is_facebook = 'fbcdn' in parsed_url.netloc or 'facebook' in parsed_url.netloc
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+            
+            if is_facebook:
+                headers['Referer'] = 'https://www.facebook.com/'
+            
+            # Try with session first (keeps cookies/connection)
+            try:
+                response = _image_session.get(image_url, timeout=15, headers=headers)
+                if response.status_code == 200:
+                    return response.content
+                elif response.status_code == 403:
+                    logger.debug(f"403 Forbidden from {parsed_url.netloc}, trying with different headers")
+                    # Try again with additional headers
+                    time.sleep(1)  # Small delay
+                    headers['Accept-Encoding'] = 'gzip, deflate, br'
+                    response = requests.get(image_url, timeout=15, headers=headers)
+                    if response.status_code == 200:
+                        return response.content
+            except:
+                pass
+            
+            # Fallback: try regular requests without session
+            response = requests.get(image_url, timeout=10, headers=headers)
             if response.status_code == 200:
                 return response.content
             else:
