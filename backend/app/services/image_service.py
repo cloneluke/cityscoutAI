@@ -168,7 +168,10 @@ Return ONLY the JSON, no other text."""
         try:
             image_data = self.download_image(image_url)
             if not image_data:
-                return False
+                # If we can't download (e.g., 403 from Facebook), skip this check
+                # The event extraction will still be attempted
+                logger.debug(f"Skipping likelihood check - image not accessible")
+                return True  # Optimistic: assume it might be an event image
             
             image_base64 = self.encode_image_to_base64(image_data)
             if not image_base64:

@@ -7,6 +7,7 @@ import re
 import os
 import sys
 import json
+import requests
 
 # Add backend path to import image service
 backend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'backend')
@@ -632,12 +633,37 @@ class FacebookSpider(scrapy.Spider):
             
             self.logger.info(f"Found {len(image_urls)} images in post")
             
-            # Extract post text
+            # Extract post text - Facebook heavily uses JS, so we'll get minimal text from static HTML
             post_text_parts = response.xpath('//div[@data-testid="post_message"]//text()').getall()
-            post_text = ' '.join(post_text_parts) if post_text_parts else post_caption
+            if not post_text_parts:
+                post_text_parts = response.xpath('//div[contains(@class, "msg")]//text()').getall()
+            if not post_text_parts:
+                post_text_parts = response.css('span::text').getall()
             
+            post_text = ' '.join([p.strip() for p in post_text_parts if p.strip()])
+            if not post_text:
+                post_text = post_caption
+            
+            self.logger.info(f"Extracted post text ({len(post_text)} chars): {post_text[:100]}...")
+            
+            # Try to extract event info from the POST TEXT itself (only if substantial text available)
+            event_created = False
+            if post_text and self.image_service and len(post_text.strip()) > 50:
+                self.logger.info(f"Attempting to extract event info from post text")
+                event_item = self.extract_event_from_post_text(post_text, post_url, page_url)
+                if event_item:
+                    self.logger.info(f"✅ Extracted event from post text: {event_item.get('title')}")
+                    yield event_item
+                    event_created = True
+            
+            # Also process images if available (even if text extraction worked)
             if not image_urls:
-                self.logger.warning(f"No images found in post {post_url}")
+                self.logger.info(f"No images found in post {post_url}")
+                # If no images and no event yet created, try fallback
+                if not event_created:
+                    fallback_event = self.create_fallback_post_event(post_url, page_url)
+                    if fallback_event:
+                        yield fallback_event
                 return
             
             # Process each image from the post
@@ -662,7 +688,153 @@ class FacebookSpider(scrapy.Spider):
                 # Extract event from this image
                 event_item = self.extract_event_from_photo(photo_data)
                 if event_item:
+                    event_created = True
                     yield event_item
+            
+            # If no events were created from image, try fallback
+            if not event_created:
+                fallback_event = self.create_fallback_post_event(post_url, page_url)
+                if fallback_event:
+                    yield fallback_event
         
         except Exception as e:
             self.logger.error(f"Error parsing post: {e}")
+    
+    def create_fallback_post_event(self, post_url, page_url):
+        """Create a basic event item from post URL and venue information (fallback when content unavailable)"""
+        try:
+            venue_info = self.get_venue_info(page_url)
+            
+            # Only create fallback event if we have venue information
+            if not venue_info.get('name'):
+                self.logger.debug(f"No venue info found for {page_url}, cannot create fallback event")
+                return None
+            
+            item = EventItem()
+            item['title'] = f"Event at {venue_info.get('name')}"
+            item['date'] = 'Check Facebook'
+            item['start_time'] = ''
+            item['end_time'] = None
+            item['location'] = venue_info.get('name')
+            item['address'] = venue_info.get('address', '')
+            item['description'] = f"See post for details: {post_url}"
+            item['image_url'] = ''
+            item['organizer'] = venue_info.get('name')
+            item['attendee_count'] = 0
+            item['url'] = post_url
+            item['source'] = 'facebook_post'
+            item['scraped_at'] = datetime.now().isoformat()
+            
+            event_hash = f"{item['title']}{item['date']}{item['location']}"
+            item['event_id'] = hashlib.md5(event_hash.encode()).hexdigest()
+            item['tags'] = ['event', 'facebook-post', 'needs-review']
+            
+            self.logger.info(f"✅ Created fallback event from post: {item['title']}")
+            return item
+        
+        except Exception as e:
+            self.logger.error(f"Error creating fallback post event: {e}")
+            return None
+    
+    def extract_event_from_post_text(self, post_text, post_url, page_url):
+        """Extract event information from post text (without requiring image download)"""
+        try:
+            if not self.image_service:
+                return None
+            
+            # Check if we actually have meaningful post text
+            if not post_text or len(post_text.strip()) < 10:
+                self.logger.debug(f"Post text too short or empty, cannot extract event")
+                return None
+            
+            self.logger.info(f"Analyzing post text for event information: {post_text[:100]}...")
+            
+            # Use the image service's Ollama connection
+            prompt = f"""Analyze this Facebook post text and extract event information if present.
+
+Post text:
+{post_text}
+
+Look for:
+- Event title or name
+- Date (in any format)
+- Time (in any format) 
+- Location or venue name
+- Address (street, city, etc.)
+- Ticket price or cost
+- Artist/performer names
+
+Format your response as JSON with these keys (use null if not found):
+{{
+  "title": "event name",
+  "date": "date if found",
+  "time": "time if found", 
+  "location": "venue or location name",
+  "address": "street address",
+  "ticket_price": "price if mentioned",
+  "performers": ["artist1", "artist2"],
+  "description": "brief description of what the post is about",
+  "confidence": "high/medium/low"
+}}
+
+Only respond with valid JSON, no other text."""
+
+            response = requests.post(
+                self.image_service.api_url,
+                json={
+                    'model': self.image_service.model,
+                    'prompt': prompt,
+                    'stream': False,
+                    'temperature': 0.2
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                response_text = result.get('response', '').strip()
+                
+                # Try to parse JSON
+                try:
+                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                    if json_match:
+                        event_info = json.loads(json_match.group())
+                        confidence = event_info.get('confidence', 'low')
+                        
+                        if confidence in ['high', 'medium'] and event_info.get('title'):
+                            # Create event item from extracted info
+                            get_venue_info = self.get_venue_info(page_url)
+                            
+                            item = EventItem()
+                            item['title'] = event_info.get('title', 'Event from Post')
+                            item['date'] = event_info.get('date', 'TBA')
+                            item['start_time'] = event_info.get('time', '')
+                            item['end_time'] = None
+                            item['location'] = get_venue_info.get('name') or event_info.get('location', 'TBA')
+                            item['address'] = get_venue_info.get('address') or event_info.get('address', '')
+                            item['description'] = event_info.get('description', post_text[:200])
+                            item['image_url'] = ''
+                            item['organizer'] = get_venue_info.get('name') or page_url.split('/')[-1] or 'Unknown'
+                            item['attendee_count'] = 0
+                            item['url'] = post_url
+                            item['source'] = 'facebook_post'
+                            item['scraped_at'] = datetime.now().isoformat()
+                            
+                            event_hash = f"{item['title']}{item['date']}{item['location']}"
+                            item['event_id'] = hashlib.md5(event_hash.encode()).hexdigest()
+                            item['tags'] = ['event', 'facebook-post', 'text-extracted']
+                            
+                            self.logger.info(f"✅ Created event from post text: {item['title']}")
+                            return item
+                        else:
+                            self.logger.debug(f"Low confidence or no title in extracted event info: {event_info}")
+                except Exception as parse_error:
+                    self.logger.debug(f"Failed to parse JSON from post text analysis: {parse_error}")
+            else:
+                self.logger.debug(f"Ollama response status: {response.status_code}")
+        
+        except Exception as e:
+            self.logger.error(f"Error extracting event from post text: {e}")
+        
+        return None
+    
