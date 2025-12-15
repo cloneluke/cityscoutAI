@@ -1,0 +1,8 @@
+# Facebook account/page to scan for events
+# The spider will scan this page and extract:
+# - Events from the page's events section
+# - Event posts from the timeline
+# Update with your Facebook page/account:
+# Example: https://www.facebook.com/SeveranceBrewing
+
+https://www.facebook.com/SeveranceBrewing

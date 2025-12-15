@@ -1,0 +1,8 @@
+Scrapy==2.11.0
+scrapy-splash==0.9.0
+Selenium==4.15.2
+beautifulsoup4==4.12.2
+elasticsearch==8.10.0
+requests==2.31.0
+python-dotenv==1.0.0
+lxml==4.9.3
