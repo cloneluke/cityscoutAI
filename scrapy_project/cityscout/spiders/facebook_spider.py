@@ -822,6 +822,7 @@ IMPORTANT: Respond with ONLY the JSON object, no additional text."""
                 # Prefer mistral for text, even if vision model is available
                 model = "mistral"
             
+            self.logger.info(f"🤖 OLLAMA CALL: Text analysis of {len(post_text)} chars - extracting event details (model={model})")
             response = requests.post(
                 api_url,
                 json={
@@ -832,12 +833,11 @@ IMPORTANT: Respond with ONLY the JSON object, no additional text."""
                 },
                 timeout=30
             )
+            self.logger.info(f"🤖 OLLAMA RESPONSE: Status {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
                 response_text = result.get('response', '').strip()
-                
-                self.logger.debug(f"Ollama response for text extraction: {response_text[:200]}")
                 
                 # Try to parse JSON
                 try:
@@ -863,6 +863,7 @@ IMPORTANT: Respond with ONLY the JSON object, no additional text."""
                         should_create = (has_event and confidence in ['high', 'medium']) and (title or event_info.get('location'))
                         
                         if should_create:
+                            self.logger.info(f"✅ OLLAMA SUCCESS: Text analysis - has_event={has_event}, confidence={confidence}, title={title}")
                             # Create event item from extracted info
                             venue_info = self.get_venue_info(page_url)
                             
@@ -888,7 +889,7 @@ IMPORTANT: Respond with ONLY the JSON object, no additional text."""
                             self.logger.info(f"✅ Created event from post text: {item['title']} ({confidence} confidence)")
                             return item
                         else:
-                            self.logger.info(f"No event detected in text (has_event={has_event}, confidence={confidence})")
+                            self.logger.info(f"⚠️  OLLAMA: No event detected in text (has_event={has_event}, confidence={confidence})")
                 except Exception as parse_error:
                     self.logger.debug(f"Failed to parse JSON from post text analysis: {parse_error}")
             else:

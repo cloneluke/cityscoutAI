@@ -123,7 +123,7 @@ Return ONLY the JSON, no other text."""
             
             # First, try passing URL directly - newer Ollama versions may support this
             # This avoids downloading entirely
-            logger.info(f"Trying to analyze image from URL directly (no download)...")
+            logger.info(f"🤖 OLLAMA CALL: Trying vision analysis from URL directly (model={self.model}, no download)...")
             
             try:
                 response = requests.post(
@@ -137,6 +137,7 @@ Return ONLY the JSON, no other text."""
                     },
                     timeout=60
                 )
+                logger.info(f"🤖 OLLAMA RESPONSE: Status {response.status_code}")
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -148,7 +149,7 @@ Return ONLY the JSON, no other text."""
                             if json_match:
                                 event_info = json.loads(json_match.group())
                                 if event_info.get('title') or event_info.get('confidence') in ['high', 'medium']:
-                                    logger.info(f"✅ SUCCESS: Analyzed image from URL without downloading!")
+                                    logger.info(f"✅ OLLAMA SUCCESS: Vision analysis from URL - extracted {event_info.get('title', 'untitled')} (confidence: {event_info.get('confidence')})")
                                     return event_info
                         except json.JSONDecodeError:
                             pass
@@ -156,18 +157,21 @@ Return ONLY the JSON, no other text."""
                 logger.debug(f"URL-based analysis failed: {type(e).__name__}: {e}")
             
             # Fallback: download and encode to base64
-            logger.info(f"Downloading image for processing...")
+            logger.info(f"🤖 OLLAMA CALL: Downloading image for vision analysis (model={self.model})...")
             image_data = self.download_image(image_url)
             if not image_data:
-                logger.warning(f"Could not access image from {image_url}")
+                logger.warning(f"❌ Could not access image from {image_url}")
                 return {}
             
             # Encode to base64
+            logger.info(f"🤖 OLLAMA CALL: Encoding image to base64 for vision analysis...")
             image_base64 = self.encode_image_to_base64(image_data)
             if not image_base64:
+                logger.error(f"❌ Failed to encode image to base64")
                 return {}
             
             # Call Ollama API with vision
+            logger.info(f"🤖 OLLAMA CALL: Sending image to Ollama vision analysis (model={self.model})...")
             response = requests.post(
                 self.api_url,
                 json={
@@ -179,6 +183,7 @@ Return ONLY the JSON, no other text."""
                 },
                 timeout=60
             )
+            logger.info(f"🤖 OLLAMA RESPONSE: Status {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
@@ -190,13 +195,13 @@ Return ONLY the JSON, no other text."""
                     json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
                     if json_match:
                         event_info = json.loads(json_match.group())
-                        logger.info(f"Extracted event info from image: {event_info}")
+                        logger.info(f"✅ OLLAMA SUCCESS: Vision analysis extracted {event_info.get('title', 'untitled')} (confidence: {event_info.get('confidence')})")
                         return event_info
                 except json.JSONDecodeError:
-                    logger.warning(f"Failed to parse JSON from image analysis: {response_text}")
+                    logger.warning(f"⚠️  OLLAMA: Failed to parse JSON from vision analysis response")
                     return {}
             else:
-                logger.error(f"Ollama vision error: {response.status_code}")
+                logger.error(f"❌ OLLAMA ERROR: Vision analysis failed with status {response.status_code}")
                 return {}
 
                 

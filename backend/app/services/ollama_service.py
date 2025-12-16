@@ -24,6 +24,7 @@ Description: {description[:500]}
 
 Return only the tags as a comma-separated list, nothing else."""
             
+            logger.info(f"🤖 OLLAMA CALL: Generating tags for '{event_title[:50]}...' (model={self.model})")
             response = requests.post(
                 self.api_url,
                 json={
@@ -34,14 +35,17 @@ Return only the tags as a comma-separated list, nothing else."""
                 },
                 timeout=30
             )
+            logger.info(f"🤖 OLLAMA RESPONSE: Status {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
                 tags_text = result.get('response', '')
                 tags = [tag.strip() for tag in tags_text.split(',')]
-                return [tag for tag in tags if tag]
+                tags = [tag for tag in tags if tag]
+                logger.info(f"✅ OLLAMA SUCCESS: Generated tags - {tags}")
+                return tags
             else:
-                logger.error(f"Ollama error: {response.status_code}")
+                logger.error(f"❌ OLLAMA ERROR: Tag generation failed with status {response.status_code}")
                 return []
         except Exception as e:
             logger.error(f"Error generating tags: {e}")
@@ -65,6 +69,7 @@ Description: {description[:300]}
 
 Return only the category name, nothing else."""
             
+            logger.info(f"🤖 OLLAMA CALL: Categorizing event '{event_title[:50]}...' (model={self.model})")
             response = requests.post(
                 self.api_url,
                 json={
@@ -75,13 +80,16 @@ Return only the category name, nothing else."""
                 },
                 timeout=30
             )
+            logger.info(f"🤖 OLLAMA RESPONSE: Status {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
                 category = result.get('response', '').strip()
-                return category or 'Other'
+                category = category or 'Other'
+                logger.info(f"✅ OLLAMA SUCCESS: Categorized as '{category}'")
+                return category
             else:
-                logger.error(f"Ollama error: {response.status_code}")
+                logger.error(f"❌ OLLAMA ERROR: Categorization failed with status {response.status_code}")
                 return 'Other'
         except Exception as e:
             logger.error(f"Error categorizing event: {e}")
@@ -90,8 +98,14 @@ Return only the category name, nothing else."""
     def health_check(self) -> bool:
         """Check if Ollama service is running"""
         try:
+            logger.info(f"🤖 OLLAMA: Running health check...")
             response = requests.get(f"{self.host}/api/tags", timeout=5)
-            return response.status_code == 200
+            if response.status_code == 200:
+                logger.info(f"✅ OLLAMA: Service is healthy and running")
+                return True
+            else:
+                logger.warning(f"⚠️  OLLAMA: Health check returned status {response.status_code}")
+                return False
         except Exception as e:
-            logger.error(f"Ollama health check failed: {e}")
+            logger.error(f"❌ OLLAMA ERROR: Health check failed - {e}")
             return False
