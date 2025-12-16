@@ -381,34 +381,38 @@ class FacebookSpider(scrapy.Spider):
         """Parse Facebook page and extract events"""
         
         try:
-            # Look for event links on the page
-            event_links = response.css('a[href*="/events/"]::attr(href)').getall()
-            event_links += response.xpath('//a[contains(@href, "/events/")]/@href').getall()
+            self.logger.info(f"📄 Parsing page: {response.url}")
             
+            # NOTE: Static HTML parsing won't work for Facebook
+            # Facebook heavily uses JavaScript to render posts and events
+            # The page returns mostly minified JS bundles, not HTML content
+            # To crawl posts from timeline, we would need:
+            # - Browser automation (Selenium/Playwright)
+            # - Facebook official API (requires approval)
+            # - GraphQL scraping (likely to be blocked)
+            
+            # Instead, we rely on:
+            # 1. Explicit post URLs from facebook_post_urls.txt (recommended)
+            # 2. Page /events sections (if Facebook exposes them)
+            
+            self.logger.debug(f"Page HTML size: {len(response.text)} bytes")
+            
+            # Try looking for event links (unlikely to work without JS)
+            event_links = response.css('a[href*="/events/"]::attr(href)').getall()
             if event_links:
-                self.logger.info(f"Found {len(event_links)} potential event links at {response.url}")
+                self.logger.info(f"Found {len(event_links)} event links at {response.url}")
                 for link in event_links:
-                    # Ensure absolute URL
                     if link.startswith('http'):
                         yield scrapy.Request(link, callback=self.parse_event, meta={'dont_obey_robotstxt': True})
                     elif link.startswith('/'):
                         yield scrapy.Request(f"https://www.facebook.com{link}", callback=self.parse_event, meta={'dont_obey_robotstxt': True})
             
-            # Also look for posts that mention events
-            posts = response.css('[data-testid="post"]')
-            self.logger.info(f"Found {len(posts)} posts to analyze at {response.url}")
+            # Note about post extraction from timeline:
+            # Posts are loaded via JavaScript/GraphQL and not in static HTML
+            # To extract them, add post URLs directly to data/facebook_post_urls.txt
+            self.logger.info(f"📌 To extract event posts: Add post URLs to data/facebook_post_urls.txt")
+            self.logger.info(f"   Format: page_url | post_url | optional_notes")
             
-            for post in posts:
-                # Extract post text
-                post_text = ' '.join(post.css('::text').getall())
-                
-                # Check if post contains event-related keywords
-                event_keywords = ['event', 'show', 'concert', 'gig', 'performance', 'live', 'ticket', 'date', 'time']
-                if any(keyword in post_text.lower() for keyword in event_keywords):
-                    self.logger.info(f"Found event-related post: {post_text[:100]}")
-                    # Yield item from post data
-                    yield self.parse_post_as_event(post, post_text)
-        
         except Exception as e:
             self.logger.error(f"Error parsing page {response.url}: {e}")
     
