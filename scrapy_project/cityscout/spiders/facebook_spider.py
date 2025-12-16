@@ -626,7 +626,7 @@ class FacebookSpider(scrapy.Spider):
             
             # Try to extract event info from og:description if present
             event_created = False
-            if og_description and self.image_service:
+            if og_description:
                 self.logger.info(f"Attempting to extract event from og:description")
                 event_item = self.extract_event_from_post_text(og_description, post_url, page_url)
                 if event_item:
@@ -811,10 +811,21 @@ Examples of has_event=false: "Check out our menu", "See you around", "New photo 
 
 IMPORTANT: Respond with ONLY the JSON object, no additional text."""
 
+            # Determine Ollama API URL
+            api_url = "http://localhost:11434/api/generate"
+            if self.image_service:
+                api_url = self.image_service.api_url
+            
+            # Use mistral model for text analysis (not vision)
+            model = "mistral"
+            if self.image_service and hasattr(self.image_service, 'model'):
+                # Prefer mistral for text, even if vision model is available
+                model = "mistral"
+            
             response = requests.post(
-                self.image_service.api_url,
+                api_url,
                 json={
-                    'model': self.image_service.model,
+                    'model': model,
                     'prompt': prompt,
                     'stream': False,
                     'temperature': 0.1  # Lower temp for more structured output
@@ -837,8 +848,19 @@ IMPORTANT: Respond with ONLY the JSON object, no additional text."""
                         confidence = event_info.get('confidence', 'low')
                         title = event_info.get('title')
                         
-                        # Accept medium/high confidence, or low confidence if has_event=True and has title
-                        should_create = (confidence in ['high', 'medium'] and title) or (has_event and title)
+                        # If no title but we have location/description, use those to construct one
+                        if not title and has_event:
+                            location = event_info.get('location')
+                            description = event_info.get('description')
+                            if location and description:
+                                title = f"{description} at {location}"[:80]
+                            elif location:
+                                title = f"Event at {location}"
+                            elif description:
+                                title = description[:80]
+                        
+                        # Accept medium/high confidence if has_event=True, or high confidence with title
+                        should_create = (has_event and confidence in ['high', 'medium']) and (title or event_info.get('location'))
                         
                         if should_create:
                             # Create event item from extracted info
