@@ -87,18 +87,12 @@ class ImageService:
         """
         Extract event information from an image using Ollama vision.
         Returns dict with extracted fields like title, date, time, location, etc.
+        
+        Tries two approaches:
+        1. Direct URL access (if Ollama can fetch it)
+        2. Download and encode to base64 (fallback)
         """
         try:
-            # Download the image
-            image_data = self.download_image(image_url)
-            if not image_data:
-                return {}
-            
-            # Encode to base64
-            image_base64 = self.encode_image_to_base64(image_data)
-            if not image_base64:
-                return {}
-            
             # Create prompt for event extraction
             prompt = """Analyze this image and extract any event information visible in it.
             
@@ -126,6 +120,52 @@ Format your response as JSON with these keys (use null if not found):
 }
 
 Return ONLY the JSON, no other text."""
+            
+            # First, try passing URL directly - newer Ollama versions may support this
+            # This avoids downloading entirely
+            logger.info(f"Trying to analyze image from URL directly (no download)...")
+            
+            try:
+                response = requests.post(
+                    self.api_url,
+                    json={
+                        'model': self.model,
+                        'prompt': prompt,
+                        'images': [image_url],  # Pass URL directly to Ollama
+                        'stream': False,
+                        'temperature': 0.2
+                    },
+                    timeout=60
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    response_text = result.get('response', '').strip()
+                    
+                    if response_text and not response_text.startswith('Error'):
+                        try:
+                            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                            if json_match:
+                                event_info = json.loads(json_match.group())
+                                if event_info.get('title') or event_info.get('confidence') in ['high', 'medium']:
+                                    logger.info(f"✅ SUCCESS: Analyzed image from URL without downloading!")
+                                    return event_info
+                        except json.JSONDecodeError:
+                            pass
+            except Exception as e:
+                logger.debug(f"URL-based analysis failed: {type(e).__name__}: {e}")
+            
+            # Fallback: download and encode to base64
+            logger.info(f"Downloading image for processing...")
+            image_data = self.download_image(image_url)
+            if not image_data:
+                logger.warning(f"Could not access image from {image_url}")
+                return {}
+            
+            # Encode to base64
+            image_base64 = self.encode_image_to_base64(image_data)
+            if not image_base64:
+                return {}
             
             # Call Ollama API with vision
             response = requests.post(
@@ -158,6 +198,7 @@ Return ONLY the JSON, no other text."""
             else:
                 logger.error(f"Ollama vision error: {response.status_code}")
                 return {}
+
                 
         except Exception as e:
             logger.error(f"Error extracting event info from image: {e}")
