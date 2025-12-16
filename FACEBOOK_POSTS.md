@@ -6,26 +6,40 @@ The CityscoutAI system can extract event information from Facebook posts in mult
 
 ## How It Works
 
-### 1. **Automatic Post Processing** ✅
+### 1. **Text Extraction from Post Metadata** ✅ (WORKING)
 
 When you add a Facebook post URL to `data/facebook_post_urls.txt`, the spider automatically:
 
 1. **Fetches the post** from Facebook
-2. **Extracts images** embedded in the post (via multiple methods)
-3. **Analyzes images** using Ollama's Llava vision model
-4. **Creates events** with extracted information (title, date, location, etc.)
+2. **Extracts og:description meta tag** from the post (structured text)
+3. **Analyzes text** using Ollama's Mistral model to identify event details
+4. **Creates full events** with: title, date, time, location, price, description
 5. **Enriches with venue data** from the venue mapping file
 
-### 2. **Venue-Based Fallback** ✅
+**Success Example:** "Join us for a Holiday tasting at Stogeez December 10th 7pm. 5 tap beers or 5 cocktails and a cigar for $35!"
+- ✅ Extracted: Holiday tasting at Stogeez, Dec 10th, 7pm, $35
+- ✅ Stored in Elasticsearch with all details
+- ✅ Source tagged as "facebook_post"
 
-If image analysis fails (e.g., Facebook CDN blocking), the system:
+### 2. **Image Analysis (Disabled)** ⚠️ 
+
+Image-based event extraction is **currently disabled** because:
+- Facebook CDN returns HTTP 403 "Bad URL hash" for signed image URLs
+- URLs are time-limited and require browser context
+- Direct image downloads fail reliably across all methods
+
+Code remains available for future use if this limitation is resolved.
+
+### 3. **Venue-Based Fallback** ✅
+
+If text extraction finds no event (no og:description), the system:
 
 1. **Detects the post source venue** (e.g., Bin 201)
 2. **Looks up venue information** from `facebook_venues.txt`
-3. **Creates a placeholder event** with:
+3. **Creates a minimal event** with:
    - Venue name and address
    - Link to the original Facebook post
-   - Helpful guidance for manual image extraction
+   - Encourages checking post content directly
 
 ### 3. **Semi-Automated Image Extraction** (For You) 📋
 
@@ -44,40 +58,60 @@ python3 extract_post_images.py --batch my_urls.txt
 
 ## Technical Details
 
-### Why Facebook Images Are Tricky
+### How Text Extraction Works ✅
 
-Facebook uses **signed, temporary image URLs** that:
+The system uses **Facebook's open graph metadata**:
+
+1. **og:description meta tag** - Contains event summary posted by the venue
+2. **Mistral model analysis** - Ollama parses the text for event details
+3. **Confidence scoring** - High/medium confidence extractions create full events
+4. **Venue enrichment** - Adds address/details from venue database
+
+Example Facebook post text:
+```
+"Join us for a Holiday tasting at Stogeez December 10th 7pm. 
+5 tap beers or 5 cocktails and a cigar for $35!"
+```
+
+Extracted to:
+```json
+{
+  "title": "Holiday tasting with 5 tap beers or 5 cocktails and a cigar at Stogeez",
+  "date": "Dec 10th",
+  "time": "7pm",
+  "location": "Stogeez",
+  "ticket_price": "$35",
+  "description": "Holiday tasting featuring 5 tap beers or cocktails and a cigar",
+  "confidence": "high"
+}
+```
+
+### Why Image Extraction Is Not Used ⚠️
+
+Facebook CDN images use **signed, temporary URLs** that:
 - Expire after a few minutes
-- Require specific browser context to access
-- Return HTTP 403 "Bad URL hash" when accessed from non-browser clients
-- Cannot be reliably scraped programmatically
+- Require specific browser context to access  
+- Return HTTP 403 "Bad URL hash" when accessed from bots/scripts
+- Cannot be reliably downloaded programmatically
 
-Example:
-```
-https://scontent-ord5-2.xx.fbcdn.net/v/t39.30808-6/594074777_...jpg
-↓
-Status: 403 Forbidden
-Response: "Bad URL hash"
-```
+The text extraction approach is:
+- ✅ More reliable (no CDN signing issues)
+- ✅ Faster (no image downloads)
+- ✅ Works for most event posts (venues post text descriptions)
+- ✅ No image processing overhead (no Ollama vision model needed)
 
-### Workarounds Implemented
+### Code Details
 
-1. **Multiple Image Source Detection** (Lines 618-642)
-   - og:image meta tag (most reliable)
-   - img tag src attributes
-   - picture element sources
-   - srcset parsing
+**Text Extraction Method:** `extract_event_from_post_text()` (facebook_spider.py line 777)
+- Calls Ollama's Mistral model for text analysis
+- Works independently (no image_service required)
+- Falls back to venue-based events if no og:description found
+- Logs all extractions with confidence levels
 
-2. **Enhanced Image Downloading** (image_service.py)
-   - Proper User-Agent headers
-   - Session management
-   - Retry logic with delays
-   - Special handling for CDN URLs
-
-3. **Graceful Degradation** (parse_post method)
-   - If images can't be downloaded → use fallback event
-   - Fallback includes direct Facebook link
-   - User can manually extract and retry
+**Image Processing:** Disabled in `parse_post()` method (lines 713-728)
+- Code remains commented with detailed explanation
+- Available for future use if Facebook CDN access is solved
+- Helper scripts (`extract_post_images.py`) remain for manual extraction
 
 ## File Structure
 
@@ -93,19 +127,31 @@ find_event_photos.py            # Photo discovery helper
 
 ## Example Workflows
 
-### Scenario 1: Automatic Extraction Works ✅
+### Scenario 1: Text Extraction Works ✅ (MOST COMMON)
 
 ```
 1. Add post URL to facebook_post_urls.txt
    https://www.facebook.com/dtsfwine | https://www.facebook.com/dtsfwine/posts/pfbid0T... |
    
 2. Run spider
-   python3 -m scrapy crawl facebook
+   cd scrapy_project && python3 -m scrapy crawl facebook
    
-3. Event with full details automatically created ✅
+3. Spider extracts og:description metadata
+   "Holiday tasting at Stogeez December 10th 7pm. $35..."
+   
+4. Ollama analyzes text and extracts:
+   - Title: "Holiday tasting with 5 tap beers... at Stogeez"
+   - Date: "Dec 10th"
+   - Time: "7pm"
+   - Location: "Stogeez" (or venue from database)
+   - Price: "$35"
+   
+5. Event stored in Elasticsearch with all details ✅
+   Source: "facebook_post"
+   Tags: ["event", "facebook-post", "text-extracted"]
 ```
 
-### Scenario 2: Automatic Extraction Fails, Use Fallback
+### Scenario 2: No og:description, Use Venue Fallback
 
 ```
 1. Add post URL to facebook_post_urls.txt
@@ -113,38 +159,43 @@ find_event_photos.py            # Photo discovery helper
 2. Run spider
    python3 -m scrapy crawl facebook
    
-3. Spider creates fallback event:
-   - Title: "Event at Bin 201"
-   - Address: "201 E. 11th Street, Sioux Falls, SD"
-   - Description: "Links to post and guides manual extraction"
+3. No og:description found → uses fallback:
+   - Creates event with venue name and address
+   - Includes link to original Facebook post
+   - Tags as ["event", "facebook-post"]
+   - User can manually check post for details
+   - Example:
+     Title: "Event at Bin 201"
+     Address: "201 E. 11th Street, Sioux Falls, SD"
+     URL: links to the Facebook post
    
-4. Open the Facebook post in your browser
-   
-5. Manually extract image using:
-   python3 extract_post_images.py
-   
-6. Run spider again to process the extracted image ✅
+4. User can manually add details to Elasticsearch if needed
 ```
 
-### Scenario 3: Use find_event_photos.py Discovery Tool
+## Adding Posts
+
+### Adding a Single Post
+
+Edit `data/facebook_post_urls.txt` and add a line:
 
 ```
-1. Run the discovery helper
-   python3 find_event_photos.py
-   
-2. Menu guides you to:
-   - Browse Facebook page
-   - Find event photos
-   - Extract image URLs
-   - Queue them automatically
-   
-3. Run spider to process all queued photos
-   python3 -m scrapy crawl facebook
+https://www.facebook.com/page_name | https://www.facebook.com/page_name/posts/post_id | optional_notes
+```
+
+Example:
+```
+https://www.facebook.com/dtsfwine | https://www.facebook.com/dtsfwine/posts/pfbid02823zoqpRszif... | Holiday tasting event
+```
+
+Then run the spider:
+```bash
+cd scrapy_project
+python3 -m scrapy crawl facebook
 ```
 
 ## Success Indicators
 
-### Event Successfully Created From Post ✅
+### Event Successfully Created From Post Text ✅
 
 ```json
 {
@@ -172,31 +223,40 @@ find_event_photos.py            # Photo discovery helper
 
 ## Best Practices
 
-1. **For Posts with Clear Event Posters**
-   - Use `extract_post_images.py` to manually extract the image
-   - Paste it in `facebook_photo_urls.txt`
-   - Re-run spider for full analysis
+1. **Text Extraction is Primary Method** ✅
+   - Most event posts have og:description metadata
+   - Ollama text analysis is reliable and fast
+   - No image processing overhead
+   - Recommended for all posts
 
-2. **For Posts with Event Details in Caption**
-   - Spider extracts caption text
-   - Uses Ollama to parse event info
-   - Creates event with extracted details
+2. **Venue Mapping for Location Enrichment**
+   - System automatically enriches with venue info from `facebook_venues.txt`
+   - Format: `facebook_url | venue_name | address | city | state`
+   - Improves location accuracy when venue can be inferred from post page
 
-3. **Keep Venue Mapping Updated**
-   - Add new venues to `facebook_venues.txt`
-   - Format: `facebook_url | venue_name | address | city | state | country`
-   - Improves fallback event quality
+3. **Monitor Extraction Quality**
+   - Log entries show confidence levels (high/medium/low)
+   - Low confidence extractions are still created but tagged appropriately
+   - Fallback events are created when no og:description found
 
-4. **Monitor image-pending Events**
-   - Search for `image-pending` tag
-   - These are good candidates for manual image extraction
-   - Re-run spider after adding images
+4. **Multiple Attempts Safe**
+   - Posts are de-duplicated by event_id
+   - Re-running spider on same posts won't create duplicates
+   - Can safely re-add posts to queue
 
-## Limitations & Future Improvements
+## Limitations & Architecture
 
-### Current Limitations
-- ❌ Cannot directly download Facebook CDN images (security restriction)
-- ❌ Cannot execute JavaScript to render post content
+### Current Design Choices
+- ✅ **Text extraction from og:description** - Most reliable, no CDN issues
+- ✅ **Mistral model for text analysis** - Faster than vision models
+- ✅ **Venue-based enrichment** - Improves location data quality
+- ❌ **Image processing** - Disabled due to Facebook CDN security restrictions
+
+### Why Not Image Processing?
+- Facebook CDN uses signed, time-limited URLs
+- HTTP 403 "Bad URL hash" errors for non-browser clients
+- No way to refresh signatures programmatically
+- Text extraction avoids this entirely
 - ⚠️ Post text extraction limited to visible HTML
 
 ### Potential Solutions (Not Implemented)
@@ -217,31 +277,65 @@ find_event_photos.py            # Photo discovery helper
 
 ## Troubleshooting
 
-### Issue: "Failed to download image: 403"
-**Solution**: This is expected for Facebook CDN URLs. Use the fallback event and manually extract the image.
+### Potential Future Enhancements
+1. **Selenium/Playwright Integration** - Would allow JavaScript rendering and dynamic content
+2. **Facebook API Access** - Official API provides structured event data (requires approval)
+3. **Multi-language Support** - Currently works best with English text
+4. **Confidence Tuning** - Fine-tune Mistral prompts for specific venue types
+
+## Troubleshooting
+
+### Issue: "No event detected in text (has_event=False)"
+**Solution**: Post text doesn't contain event details. Check that:
+1. Post has og:description metadata
+2. Description mentions dates/times/locations
+3. Fallback event was created instead - user can manually check post
 
 ### Issue: "Low confidence event extraction"
-**Solution**: The vision model wasn't confident. Check the image quality or add venue information.
+**Solution**: Ollama wasn't confident in the extraction. Examples:
+- Text is ambiguous or poorly formatted
+- No clear dates/times mentioned
+- Multiple conflicting event details
+Check the extracted data - it may still be useful
 
-### Issue: "No post text found"
-**Solution**: Post might use JavaScript rendering. Use manual image extraction instead.
+### Issue: "Analyzing post text... No event detected"
+**Diagnosis**: Either:
+1. Post has no og:description (social media share, not event post)
+2. og:description doesn't contain event-like information
+3. Ollama determined it's not an event
+
+**Solution**: Fallback event created with venue info. User can manually verify post content.
 
 ### Issue: Events not appearing in web interface
 **Solution**: 
-1. Check spider logs for errors
+1. Check spider logs: `grep -i error facebook_spider.log`
 2. Verify Elasticsearch is running: `curl http://localhost:9200`
 3. Check events in Elasticsearch: `curl http://localhost:9200/events/_search`
+4. Verify spider pipeline: `scrapy_project/cityscout/pipelines.py`
 
 ## Testing
 
-### Test Image Extraction
+### Test Text Extraction Directly
 ```bash
-# Manually test image download
+# Test Ollama text analysis
 python3 << 'EOF'
-from backend.app.services.image_service import ImageService
-service = ImageService()
-image_data = service.download_image("https://example.com/image.jpg")
-print(f"Downloaded: {len(image_data)} bytes" if image_data else "Failed")
+import requests
+import json
+
+prompt = """Extract event details from: "Holiday tasting at Stogeez Dec 10 7pm. $35"
+Return JSON with title, date, time, location, price."""
+
+response = requests.post(
+    "http://localhost:11434/api/generate",
+    json={'model': 'mistral', 'prompt': prompt, 'stream': False},
+    timeout=30
+)
+
+if response.status_code == 200:
+    result = response.json()
+    print("Ollama Response:", result['response'])
+else:
+    print(f"Error: {response.status_code}")
 EOF
 ```
 
