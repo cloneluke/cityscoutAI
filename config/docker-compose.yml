@@ -51,6 +51,55 @@ services:
     networks:
       - cityscout
 
+  scraper_playwright:
+    build:
+      context: ../scrapy_project
+      dockerfile: Dockerfile.playwright
+    container_name: cityscout_playwright
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+    volumes:
+      - ../data:/data
+    networks:
+      - cityscout
+    profiles:
+      - scrapers
+
+  scraper_facebook:
+    build:
+      context: ../scrapy_project
+      dockerfile: Dockerfile.headless
+    container_name: cityscout_facebook
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+    volumes:
+      - ../data:/data
+    networks:
+      - cityscout
+    profiles:
+      - scrapers
+
+  scraper_dynamic:
+    build:
+      context: ../scrapy_project
+      dockerfile: Dockerfile.scrapy
+    container_name: cityscout_dynamic
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+    volumes:
+      - ../data:/data
+    networks:
+      - cityscout
+    command: ["python", "run_multiprocess_spiders.py", "dynamic"]
+    profiles:
+      - scrapers
+
 volumes:
   es_data:
     driver: local

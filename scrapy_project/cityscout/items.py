@@ -12,8 +12,8 @@ class EventItem(scrapy.Item):
     description = scrapy.Field()
     image_url = scrapy.Field()
     organizer = scrapy.Field()
-    attendee_count = scrapy.Field()
     url = scrapy.Field()
+    link = scrapy.Field()  # Facebook/source link for the event
     source = scrapy.Field()  # 'facebook', 'eventbrite', 'google'
     scraped_at = scrapy.Field()
     event_id = scrapy.Field()  # For deduplication

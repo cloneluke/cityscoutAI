@@ -1,9 +1,0 @@
-# Facebook Venue Information Mapping
-# Format: facebook_url | venue_name | address | city | state | country
-# This helps enrich event data with proper venue information
-
-https://www.facebook.com/SeveranceBrewing | Severance Brewing | Sioux Falls, SD | Sioux Falls | SD | United States
-https://www.facebook.com/woodgrainbrew | Woodgrain Brewing | Sioux Falls, SD | Sioux Falls | SD | United States
-https://www.facebook.com/wgosf | WGO Sioux Falls | Sioux Falls, SD | Sioux Falls | SD | United States
-https://www.facebook.com/washpav | Washington Pavilion | Sioux Falls, SD | Sioux Falls | SD | United States
-https://www.facebook.com/dtsfwine | Bin 201 | 201 E. 11th Street, Sioux Falls, SD, United States | Sioux Falls | SD | United States

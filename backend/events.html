@@ -92,98 +92,130 @@
             display: flex;
             gap: 20px;
             flex-wrap: wrap;
-            color: white;
+            color: #667eea;
             font-weight: 600;
+            margin-left: auto;
         }
 
         .stat {
-            background: rgba(255, 255, 255, 0.2);
+            background: #f0f0f0;
             padding: 10px 15px;
             border-radius: 8px;
-            backdrop-filter: blur(10px);
+            color: #333;
         }
 
-        .events-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 25px;
+        .events-table {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             margin-bottom: 30px;
         }
 
-        .event-card {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s, box-shadow 0.3s;
-            border-left: 5px solid #667eea;
+        table {
+            width: 100%;
+            border-collapse: collapse;
         }
 
-        .event-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+        thead {
+            background: #667eea;
+            color: white;
         }
 
-        .event-title {
-            font-size: 1.3em;
-            font-weight: 700;
-            color: #333;
-            margin-bottom: 10px;
-            line-height: 1.4;
-        }
-
-        .event-location {
-            color: #667eea;
+        th {
+            padding: 15px;
+            text-align: left;
             font-weight: 600;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
         }
 
-        .event-details {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-bottom: 15px;
-            padding-bottom: 15px;
+        th:hover {
+            background: #5568d3;
+        }
+
+        th.sortable::after {
+            content: ' ↕';
+            font-size: 0.8em;
+            opacity: 0.6;
+        }
+
+        th.sorted-asc::after {
+            content: ' ↑';
+            opacity: 1;
+        }
+
+        th.sorted-desc::after {
+            content: ' ↓';
+            opacity: 1;
+        }
+
+        tbody tr {
             border-bottom: 1px solid #e0e0e0;
+            transition: background 0.2s;
         }
 
-        .detail-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: #666;
-            font-size: 0.95em;
+        tbody tr:hover {
+            background: #f9f9f9;
         }
 
-        .detail-label {
-            font-weight: 600;
+        td {
+            padding: 15px;
             color: #333;
-            min-width: 80px;
-        }
-
-        .event-description {
-            color: #555;
             font-size: 0.95em;
-            line-height: 1.5;
-            margin-bottom: 15px;
         }
 
-        .event-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
+        .event-title-col {
+            font-weight: 600;
+            max-width: 300px;
+            word-wrap: break-word;
+        }
+
+        .event-location-col {
+            color: #667eea;
+            font-weight: 500;
+            max-width: 200px;
+            word-wrap: break-word;
+        }
+
+        .event-date-col {
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .event-time-col {
+            white-space: nowrap;
+        }
+
+        .event-link-col a {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.85em;
+        }
+
+        .event-link-col a:hover {
+            text-decoration: underline;
+        }
+
+        .event-id-col {
+            font-family: 'Courier New', monospace;
+            font-size: 0.75em;
+            color: #999;
+            max-width: 120px;
+            word-break: break-all;
+            padding: 10px 8px;
         }
 
         .tag {
             background: #f0f0f0;
             color: #667eea;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.85em;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
             font-weight: 500;
+            display: inline-block;
+            margin-right: 5px;
         }
 
         .loading {
@@ -211,16 +243,7 @@
             font-size: 1.1em;
         }
 
-        .attendees {
-            background: #f9f9f9;
-            padding: 8px 12px;
-            border-radius: 6px;
-            color: #667eea;
-            font-weight: 600;
-            font-size: 0.9em;
-        }
-
-        .event-url {
+        .detail-row {
             color: #667eea;
             text-decoration: none;
             font-size: 0.85em;
@@ -282,7 +305,25 @@
             Loading events...
         </div>
 
-        <div id="eventsContainer" class="events-grid"></div>
+        <div id="eventsContainer" class="events-table">
+            <table id="eventsTable">
+                <thead>
+                    <tr>
+                        <th class="sortable" onclick="sortTable('date')">📅 Date</th>
+                        <th class="sortable" onclick="sortTable('start_time')">⏰ Time</th>
+                        <th class="sortable" onclick="sortTable('title')">🎉 Event</th>
+                        <th class="sortable" onclick="sortTable('location')">📍 Location</th>
+                        <th class="sortable" onclick="sortTable('source')">📌 Source</th>
+                        <th>🔗 Link</th>
+                        <th>ID</th>
+                    </tr>
+                </thead>
+                <tbody id="eventsTableBody">
+                </tbody>
+            </table>
+        </div>
+
+        <div id="noResults" class="no-results" style="display: none;">No events found. Try a different search.</div>
 
         <footer>
             <p>cityscoutAI - Local Event Discovery Platform | Powered by Scrapy, Elasticsearch & FastAPI</p>
@@ -291,6 +332,7 @@
 
     <script>
         let allEvents = [];
+        let currentSort = { field: 'date', direction: 'asc' };
         const API_BASE = 'http://localhost:8000/api';
 
         // Load events on page load
@@ -315,8 +357,19 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 allEvents = await response.json();
-                displayEvents(allEvents);
-                document.getElementById('totalCount').textContent = allEvents.length;
+                console.log('Loaded events array:', allEvents.length);
+                // Update total count BEFORE sorting
+                const totalCountEl = document.getElementById('totalCount');
+                console.log('totalCountEl found:', !!totalCountEl);
+                if (totalCountEl) {
+                    console.log('Setting totalCount to:', allEvents.length);
+                    totalCountEl.textContent = allEvents.length;
+                    console.log('totalCountEl.textContent now:', totalCountEl.textContent);
+                }
+                // Sort by date by default
+                currentSort = { field: 'date', direction: 'asc' };
+                sortedDisplay(allEvents);
+                updateSortIndicator('date');
             } catch (error) {
                 console.error('Error loading events:', error);
                 errorContainer.innerHTML = `<div class="error">Error loading events: ${error.message}</div>`;
@@ -325,87 +378,167 @@
             }
         }
 
-        function searchEvents() {
-            const query = document.getElementById('searchInput').value.toLowerCase();
+        function parseDate(dateStr) {
+            // Try to parse various date formats
+            const date = new Date(dateStr);
+            if (!isNaN(date)) return date;
             
-            if (!query) {
-                displayEvents(allEvents);
-                return;
+            // Try parsing "Monday December 15th" format
+            const cleaned = dateStr.replace(/\b(st|nd|rd|th)\b/g, '').trim();
+            const date2 = new Date(cleaned);
+            if (!isNaN(date2)) return date2;
+            
+            return new Date(0);
+        }
+
+        function formatDateForDisplay(dateStr) {
+            // Takes YYYY-MM-DD format and returns "Weekday, MM/DD/YYYY"
+            if (!dateStr) return '—';
+            
+            try {
+                const [year, month, day] = dateStr.split('-');
+                const date = new Date(year, parseInt(month) - 1, day);
+                
+                if (isNaN(date.getTime())) {
+                    return dateStr; // Fallback to original if parsing fails
+                }
+                
+                const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                const weekday = weekdays[date.getDay()];
+                const monthNum = String(date.getMonth() + 1).padStart(2, '0');
+                const dayNum = String(date.getDate()).padStart(2, '0');
+                const yearNum = date.getFullYear();
+                
+                return `${weekday}, ${monthNum}/${dayNum}/${yearNum}`;
+            } catch (e) {
+                return dateStr; // Fallback to original
+            }
+        }
+
+        function sortTable(field) {
+            // Toggle direction if same field, otherwise set to asc
+            if (currentSort.field === field) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.field = field;
+                currentSort.direction = 'asc';
             }
 
-            const filteredEvents = allEvents.filter(event => {
-                const searchableText = `
-                    ${event.title}
-                    ${event.description}
-                    ${event.location}
-                    ${event.organizer}
-                    ${event.tags.join(' ')}
-                `.toLowerCase();
-                return searchableText.includes(query);
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            let eventsToSort = allEvents;
+            
+            if (query) {
+                eventsToSort = allEvents.filter(event => {
+                    const searchableText = `
+                        ${event.title}
+                        ${event.description}
+                        ${event.location}
+                        ${event.organizer}
+                        ${event.tags.join(' ')}
+                    `.toLowerCase();
+                    return searchableText.includes(query);
+                });
+            }
+
+            eventsToSort.sort((a, b) => {
+                let aVal = a[field] || '';
+                let bVal = b[field] || '';
+
+                // Special handling for dates
+                if (field === 'date') {
+                    aVal = parseDate(aVal);
+                    bVal = parseDate(bVal);
+                } else if (field === 'start_time') {
+                    // Parse time format HH:MM am/pm
+                    aVal = parseTime(aVal);
+                    bVal = parseTime(bVal);
+                } else {
+                    // String comparison
+                    aVal = String(aVal).toLowerCase();
+                    bVal = String(bVal).toLowerCase();
+                }
+
+                if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
+                return 0;
             });
 
-            displayEvents(filteredEvents);
+            updateSortIndicator(field);
+            sortedDisplay(eventsToSort);
+        }
+
+        function parseTime(timeStr) {
+            if (!timeStr) return '00:00';
+            // Extract HH:MM from formats like "7:00 pm" or "19:00"
+            const match = timeStr.match(/(\d{1,2}):(\d{2})/);
+            if (!match) return '00:00';
+            
+            let hours = parseInt(match[1]);
+            const minutes = match[2];
+            
+            // Handle 12-hour format
+            if (timeStr.includes('pm') && hours !== 12) {
+                hours += 12;
+            } else if (timeStr.includes('am') && hours === 12) {
+                hours = 0;
+            }
+            
+            return String(hours).padStart(2, '0') + ':' + minutes;
+        }
+
+        function updateSortIndicator(field) {
+            // Remove all sort indicators
+            document.querySelectorAll('th').forEach(th => {
+                th.classList.remove('sorted-asc', 'sorted-desc');
+            });
+
+            // Add sort indicator to current sort field
+            const ths = document.querySelectorAll('th');
+            ths.forEach(th => {
+                if (th.textContent.includes(field.charAt(0).toUpperCase())) {
+                    th.classList.add(currentSort.direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+                }
+            });
+        }
+
+        function searchEvents() {
+            sortTable(currentSort.field);
         }
 
         function clearSearch() {
             document.getElementById('searchInput').value = '';
-            displayEvents(allEvents);
+            sortTable(currentSort.field);
         }
 
-        function displayEvents(events) {
-            const container = document.getElementById('eventsContainer');
-            document.getElementById('displayCount').textContent = events.length;
+        function sortedDisplay(events) {
+            const container = document.getElementById('eventsTableBody');
+            const noResults = document.getElementById('noResults');
+            // Only update display count, not total count
+            const displayCountEl = document.getElementById('displayCount');
+            if (displayCountEl) {
+                displayCountEl.textContent = events.length;
+            }
 
             if (events.length === 0) {
-                container.innerHTML = '<div class="no-results">No events found. Try a different search.</div>';
+                container.innerHTML = '';
+                noResults.style.display = 'block';
+                document.getElementById('eventsContainer').style.display = 'none';
                 return;
             }
 
+            noResults.style.display = 'none';
+            document.getElementById('eventsContainer').style.display = 'block';
+
             container.innerHTML = events.map(event => `
-                <div class="event-card">
-                    <div class="event-title">${escapeHtml(event.title)}</div>
-                    <div class="event-location">📍 ${escapeHtml(event.location)}</div>
-                    
-                    <div class="event-details">
-                        <div class="detail-row">
-                            <span class="detail-label">📅 Date:</span>
-                            <span>${escapeHtml(event.date)}</span>
-                        </div>
-                        ${event.start_time ? `
-                        <div class="detail-row">
-                            <span class="detail-label">⏰ Time:</span>
-                            <span>${escapeHtml(event.start_time)}${event.end_time ? ` - ${escapeHtml(event.end_time)}` : ''}</span>
-                        </div>
-                        ` : ''}
-                        ${event.address ? `
-                        <div class="detail-row">
-                            <span class="detail-label">📍 Address:</span>
-                            <span>${escapeHtml(event.address)}</span>
-                        </div>
-                        ` : ''}
-                        ${event.organizer ? `
-                        <div class="detail-row">
-                            <span class="detail-label">🏢 Organizer:</span>
-                            <span>${escapeHtml(event.organizer)}</span>
-                        </div>
-                        ` : ''}
-                        ${event.attendee_count ? `
-                        <div class="detail-row">
-                            <span class="attendees">👥 ${event.attendee_count} expected attendees</span>
-                        </div>
-                        ` : ''}
-                    </div>
-
-                    ${event.description ? `
-                    <div class="event-description">${escapeHtml(event.description)}</div>
-                    ` : ''}
-
-                    ${event.tags && event.tags.length > 0 ? `
-                    <div class="event-tags">
-                        ${event.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
-                    </div>
-                    ` : ''}
-                </div>
+                <tr>
+                    <td class="event-date-col">${formatDateForDisplay(event.date)}</td>
+                    <td class="event-time-col">${escapeHtml(event.start_time || '—')}${event.end_time ? ` - ${escapeHtml(event.end_time)}` : ''}</td>
+                    <td class="event-title-col">${escapeHtml(event.title)}</td>
+                    <td class="event-location-col">${escapeHtml(event.location)}</td>
+                    <td class="event-source-col">${escapeHtml(event.source || '—')}</td>
+                    <td class="event-link-col">${event.link ? `<a href="${escapeHtml(event.link)}" target="_blank" title="${escapeHtml(event.url)}">View →</a>` : event.url ? `<a href="${escapeHtml(event.url)}" target="_blank" title="${escapeHtml(event.url)}">View →</a>` : '—'}</td>
+                    <td class="event-id-col" title="${escapeHtml(event.event_id || '')}">${escapeHtml((event.event_id || '').substring(0, 12))}</td>
+                </tr>
             `).join('');
         }
 

@@ -9,15 +9,15 @@ class EventBase(BaseModel):
     date: str
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    location: str
+    location: Optional[str] = None
     address: Optional[str] = None
     description: Optional[str] = None
     image_url: Optional[str] = None
     organizer: Optional[str] = None
-    attendee_count: Optional[Union[int, str]] = None
-    url: str
-    source: str
-    tags: Optional[List[str]] = []
+    url: Optional[str] = None
+    link: Optional[str] = None
+    source: Optional[str] = None
+    tags: Optional[List[str]] = None
 
 
 class EventCreate(EventBase):
@@ -37,10 +37,13 @@ class EventUpdate(BaseModel):
 class Event(EventBase):
     """Event response model"""
     event_id: str
-    scraped_at: str
+    scraped_at: Optional[str] = None
+    timestamp: Optional[str] = None
     
     class Config:
         from_attributes = True
+        # Allow extra fields for flexibility
+        extra = 'allow'
 
 
 class EventSearchQuery(BaseModel):

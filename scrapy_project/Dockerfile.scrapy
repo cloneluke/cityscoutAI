@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies (minimal for Scrapy)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy Scrapy project
+COPY . .
+
+# Volume for input URLs and output
+VOLUME ["/data"]
+
+# Run multiprocess spider runner to scrape URLs from /data/website_urls.txt
+# ENTRYPOINT allows passing spider_type as argument
+ENTRYPOINT ["python", "run_multiprocess_spiders.py"]
+CMD ["dynamic"]

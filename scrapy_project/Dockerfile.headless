@@ -1,0 +1,17 @@
+FROM mcr.microsoft.com/playwright/python:v1.40.0-focal
+
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy scripts
+COPY headless_scraper.py .
+
+# Volume for data access
+VOLUME ["/data"]
+
+CMD ["python3", "headless_scraper.py"]

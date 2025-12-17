@@ -37,7 +37,7 @@ class DeduplicationPipeline:
                                 'description': {'type': 'text'},
                                 'image_url': {'type': 'keyword'},
                                 'organizer': {'type': 'text'},
-                                'attendee_count': {'type': 'integer'},
+                                'link': {'type': 'keyword'},
                                 'source': {'type': 'keyword'},
                                 'event_id': {'type': 'keyword'},
                                 'url': {'type': 'keyword'},

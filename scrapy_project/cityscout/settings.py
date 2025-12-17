@@ -31,7 +31,8 @@ USER_AGENT_LIST = [
 ]
 
 # Enable and configure HTTP caching
-HTTPCACHE_ENABLED = True
+# Disabled for website spiders - they need fresh pages to render JS
+HTTPCACHE_ENABLED = False
 HTTPCACHE_EXPIRATION_SECS = 86400
 HTTPCACHE_DIR = 'httpcache'
 

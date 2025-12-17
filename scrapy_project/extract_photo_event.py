@@ -34,7 +34,9 @@ def extract_event_from_facebook_photo(photo_url, image_url=None, caption=None):
     
     # If we have an image URL, try to extract event info from it
     if image_url:
-        print(f"Processing image: {image_url[:60]}...")
+        # Image processing is DISABLED
+        # Reason: Facebook CDN URLs are signed, time-limited, and return HTTP 403
+        # print(f"Processing image: {image_url[:60]}...")
         
         # Check if likely event image
         if not image_service.is_likely_event_image(image_url):
